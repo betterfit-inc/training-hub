@@ -12,8 +12,10 @@ import {
   rowsToSplits,
   type SplitRow,
 } from "@/components/splits-editor";
+import { useI18n } from "@/components/i18n-provider";
 import { updateSplitsAction } from "@/lib/actions";
 import { fmtKm } from "@/lib/format";
+import { splitErrorText } from "@/lib/i18n";
 import { isRunSport, validateSplits } from "@/lib/validate";
 import type { ActivityWithSplits, ShoeOption } from "@/lib/types";
 
@@ -25,6 +27,7 @@ export function SplitsSection({
   shoes: ShoeOption[];
 }) {
   const router = useRouter();
+  const { t } = useI18n();
   const [editing, setEditing] = useState(false);
   const [rows, setRows] = useState<SplitRow[]>([]);
   const [pending, startTransition] = useTransition();
@@ -36,10 +39,10 @@ export function SplitsSection({
       <div className="flex items-center justify-between gap-3 rounded-lg border border-primary/25 bg-primary/5 px-4 py-3">
         <p className="flex items-center gap-2 text-sm">
           <ClockIcon className="size-4 text-primary" aria-hidden />
-          Waiting for review. Shoe mileage counts once you confirm it.
+          {t.detail.pendingBanner}
         </p>
         <Button asChild size="sm">
-          <Link href="/review">Review now</Link>
+          <Link href="/review">{t.detail.reviewNow}</Link>
         </Button>
       </div>
     );
@@ -62,7 +65,7 @@ export function SplitsSection({
     const payload = rowsToSplits(rows);
     const error = validateSplits(activity, payload);
     if (error) {
-      toast.error(error);
+      toast.error(splitErrorText(error, t));
       return;
     }
     startTransition(async () => {
@@ -71,7 +74,7 @@ export function SplitsSection({
         toast.error(result.error);
         return;
       }
-      toast.success("Splits saved");
+      toast.success(t.toasts.splitsSaved);
       setEditing(false);
       router.refresh();
     });
@@ -82,9 +85,7 @@ export function SplitsSection({
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-2">
           {activity.splits.length === 0 ? (
-            <p className="text-sm text-muted-foreground/60">
-              No shoe mileage recorded for this activity.
-            </p>
+            <p className="text-sm text-muted-foreground/60">{t.detail.noSplits}</p>
           ) : (
             <ul className="min-w-0 flex-1 space-y-1.5">
               {activity.splits.map((split) => (
@@ -93,7 +94,7 @@ export function SplitsSection({
                   className="flex items-baseline justify-between gap-4 border-b border-dashed border-border/70 pb-1.5 text-sm"
                 >
                   <span className="min-w-0 truncate">
-                    {split.shoe_name ?? "No shoe"}
+                    {split.shoe_name ?? t.detail.noShoe}
                     {split.shoe_role ? (
                       <span className="text-xs text-muted-foreground"> · {split.shoe_role}</span>
                     ) : null}
@@ -105,7 +106,7 @@ export function SplitsSection({
           )}
           <Button variant="ghost" size="sm" onClick={startEditing} className="shrink-0 self-start">
             <PencilIcon data-icon="inline-start" />
-            {activity.splits.length === 0 ? "Assign shoes" : "Edit"}
+            {activity.splits.length === 0 ? t.detail.assignShoes : t.detail.edit}
           </Button>
         </div>
       </div>
@@ -124,10 +125,10 @@ export function SplitsSection({
       <div className="flex items-center gap-2">
         <Button onClick={save} disabled={pending}>
           {pending ? <Loader2Icon className="animate-spin" data-icon="inline-start" /> : null}
-          Save splits
+          {t.detail.saveSplits}
         </Button>
         <Button variant="ghost" onClick={() => setEditing(false)} disabled={pending}>
-          Cancel
+          {t.detail.cancel}
         </Button>
       </div>
     </div>

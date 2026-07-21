@@ -23,8 +23,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useI18n } from "@/components/i18n-provider";
 import { saveShoeAction, setShoeRetiredAction } from "@/lib/actions";
 import { fmtKm } from "@/lib/format";
+import { fillStr } from "@/lib/i18n";
 import type { Shoe, StravaGear } from "@/lib/types";
 
 export function ShoeDialog({
@@ -39,6 +41,7 @@ export function ShoeDialog({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
@@ -49,7 +52,7 @@ export function ShoeDialog({
         toast.error(result.error);
         return;
       }
-      toast.success(shoe ? "Shoe updated" : "Shoe added");
+      toast.success(shoe ? t.toasts.shoeUpdated : t.toasts.shoeAdded);
       setOpen(false);
       router.refresh();
     });
@@ -62,18 +65,18 @@ export function ShoeDialog({
       <DialogTrigger asChild>{children}</DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{shoe ? `Edit ${shoe.name}` : "Add a shoe"}</DialogTitle>
+          <DialogTitle>
+            {shoe ? fillStr(t.shoeDialog.editTitle, { name: shoe.name }) : t.shoeDialog.addTitle}
+          </DialogTitle>
           <DialogDescription>
-            {shoe
-              ? "Update details, photo or Strava gear link."
-              : "New shoes start at zero unless you give them a baseline."}
+            {shoe ? t.shoeDialog.editBody : t.shoeDialog.addBody}
           </DialogDescription>
         </DialogHeader>
         <form action={submit} className="space-y-4">
           {shoe ? <input type="hidden" name="id" value={shoe.id} /> : null}
 
           <div className="space-y-1.5">
-            <Label htmlFor="shoe-name">Name</Label>
+            <Label htmlFor="shoe-name">{t.shoeDialog.name}</Label>
             <Input
               id="shoe-name"
               name="name"
@@ -84,18 +87,18 @@ export function ShoeDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="shoe-role">Role</Label>
+            <Label htmlFor="shoe-role">{t.shoeDialog.role}</Label>
             <Input
               id="shoe-role"
               name="role"
               defaultValue={shoe?.role ?? ""}
-              placeholder="easy runs, long runs..."
+              placeholder={t.shoeDialog.rolePlaceholder}
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="shoe-initial">Baseline km</Label>
+              <Label htmlFor="shoe-initial">{t.shoeDialog.baseline}</Label>
               <Input
                 id="shoe-initial"
                 name="initial_km"
@@ -107,7 +110,7 @@ export function ShoeDialog({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="shoe-retirement">Retire at (km)</Label>
+              <Label htmlFor="shoe-retirement">{t.shoeDialog.retireAt}</Label>
               <Input
                 id="shoe-retirement"
                 name="retirement_km"
@@ -121,24 +124,22 @@ export function ShoeDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="shoe-photo">Photo</Label>
+            <Label htmlFor="shoe-photo">{t.shoeDialog.photo}</Label>
             <Input id="shoe-photo" name="photo" type="file" accept="image/*" />
             {shoe?.photo_path ? (
-              <p className="text-xs text-muted-foreground">
-                Leave empty to keep the current photo.
-              </p>
+              <p className="text-xs text-muted-foreground">{t.shoeDialog.keepPhoto}</p>
             ) : null}
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="shoe-gear">Strava gear</Label>
+            <Label htmlFor="shoe-gear">{t.shoeDialog.gear}</Label>
             {gearList.length > 0 ? (
               <Select name="strava_gear_id" defaultValue={shoe?.strava_gear_id ?? "none"}>
                 <SelectTrigger id="shoe-gear" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">Not linked</SelectItem>
+                  <SelectItem value="none">{t.shoeDialog.notLinked}</SelectItem>
                   {gearList.map((gear) => (
                     <SelectItem key={gear.id} value={gear.id}>
                       <span className="truncate">{gear.name}</span>
@@ -153,9 +154,7 @@ export function ShoeDialog({
               </Select>
             ) : (
               <p className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
-                {connected
-                  ? "Could not load your gear list from Strava right now."
-                  : "Connect Strava in Settings to link this shoe to its gear, so synced runs match it automatically."}
+                {connected ? t.shoeDialog.gearUnavailable : t.shoeDialog.gearConnectHint}
               </p>
             )}
           </div>
@@ -163,7 +162,7 @@ export function ShoeDialog({
           <DialogFooter>
             <Button type="submit" disabled={pending}>
               {pending ? <Loader2Icon className="animate-spin" data-icon="inline-start" /> : null}
-              {shoe ? "Save changes" : "Add shoe"}
+              {shoe ? t.shoeDialog.save : t.shoeDialog.add}
             </Button>
           </DialogFooter>
         </form>
@@ -174,6 +173,7 @@ export function ShoeDialog({
 
 export function RetireButton({ shoe }: { shoe: Shoe }) {
   const router = useRouter();
+  const { t } = useI18n();
   const [pending, startTransition] = useTransition();
   const retired = !!shoe.retired_at;
 
@@ -184,7 +184,9 @@ export function RetireButton({ shoe }: { shoe: Shoe }) {
         toast.error(result.error);
         return;
       }
-      toast.success(retired ? `${shoe.name} is back in rotation` : `${shoe.name} retired`);
+      toast.success(
+        fillStr(retired ? t.toasts.backInRotation : t.toasts.retired, { name: shoe.name })
+      );
       router.refresh();
     });
   }
@@ -196,7 +198,7 @@ export function RetireButton({ shoe }: { shoe: Shoe }) {
       ) : (
         <ArchiveIcon data-icon="inline-start" />
       )}
-      {retired ? "Unretire" : "Retire"}
+      {retired ? t.shoesPage.unretire : t.shoesPage.retire}
     </Button>
   );
 }

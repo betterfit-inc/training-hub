@@ -1,3 +1,4 @@
+import type { SplitError } from "./i18n";
 import type { SplitInput } from "./types";
 
 export function isRunSport(sport: string | null | undefined): boolean {
@@ -10,7 +11,8 @@ export function sumSplits(splits: SplitInput[]): number {
 
 /**
  * Shared split validation for the review queue and the activity detail editor.
- * Returns an error message, or null when the splits are valid.
+ * Returns a language-neutral error code (render it with splitErrorText), or
+ * null when the splits are valid.
  *
  * Rules:
  * - Every split needs a shoe and a distance greater than zero.
@@ -21,20 +23,18 @@ export function sumSplits(splits: SplitInput[]): number {
 export function validateSplits(
   activity: { distance_km: number | null; sport_type: string | null },
   splits: SplitInput[]
-): string | null {
+): SplitError | null {
   const run = isRunSport(activity.sport_type);
   const dist = activity.distance_km ?? 0;
 
   if (splits.length === 0) {
-    if (run && dist > 0.05) return "Assign at least one shoe to this run.";
+    if (run && dist > 0.05) return { code: "assignRun" };
     return null;
   }
 
   for (const s of splits) {
-    if (s.shoe_id == null) return "Every split needs a shoe.";
-    if (!Number.isFinite(s.km) || s.km <= 0) {
-      return "Split distances must be greater than zero.";
-    }
+    if (s.shoe_id == null) return { code: "needShoe" };
+    if (!Number.isFinite(s.km) || s.km <= 0) return { code: "positiveKm" };
   }
 
   if (dist > 0) {
@@ -42,12 +42,10 @@ export function validateSplits(
     if (run && Math.abs(total - dist) > 0.05) {
       const remaining = Math.round((dist - total) * 100) / 100;
       return remaining > 0
-        ? `${remaining.toFixed(2)} km of this run is not assigned to a shoe yet.`
-        : `Splits exceed the run distance by ${Math.abs(remaining).toFixed(2)} km.`;
+        ? { code: "underBy", km: remaining.toFixed(2) }
+        : { code: "overBy", km: Math.abs(remaining).toFixed(2) };
     }
-    if (!run && total - dist > 0.05) {
-      return "Splits cannot exceed the activity distance.";
-    }
+    if (!run && total - dist > 0.05) return { code: "exceedDistance" };
   }
 
   return null;

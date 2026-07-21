@@ -1,20 +1,32 @@
 import Link from "next/link";
-import { CableIcon, FootprintsIcon, RefreshCwIcon } from "lucide-react";
+import {
+  CableIcon,
+  ChevronRightIcon,
+  FootprintsIcon,
+  RefreshCwIcon,
+  SearchXIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import { FeelingBadge } from "@/components/feeling-badge";
+import { FilterPill } from "@/components/filter-pill";
 import { ReviewBanner } from "@/components/review-banner";
 import { SportIcon } from "@/components/sport-icon";
 import { countPending, listConfirmedActivities } from "@/lib/db";
+import { getDict } from "@/lib/lang";
 import { isStravaConnected, stravaConfigured } from "@/lib/strava";
 import {
   fmtDate,
+  fmtDateWithYear,
   fmtDuration,
+  fmtHoursMin,
   fmtKm,
   fmtPace,
   mondayOf,
   weekLabel,
 } from "@/lib/format";
+import { fillStr, type Dict, type Lang } from "@/lib/i18n";
+import { SPORT_CATEGORIES, sportCategory, type SportCategory } from "@/lib/sports";
 import { isRunSport } from "@/lib/validate";
 import type { ActivityWithSplits } from "@/lib/types";
 
@@ -23,11 +35,13 @@ export const metadata = { title: "Training log" };
 interface WeekGroup {
   key: string;
   label: string;
-  runKm: number;
   items: ActivityWithSplits[];
+  km: Partial<Record<SportCategory, number>>;
+  seconds: Partial<Record<SportCategory, number>>;
+  count: Partial<Record<SportCategory, number>>;
 }
 
-function groupByWeek(activities: ActivityWithSplits[]): WeekGroup[] {
+function groupByWeek(activities: ActivityWithSplits[], lang: Lang): WeekGroup[] {
   const groups: WeekGroup[] = [];
   const byKey = new Map<string, WeekGroup>();
   for (const activity of activities) {
@@ -36,17 +50,45 @@ function groupByWeek(activities: ActivityWithSplits[]): WeekGroup[] {
     const key = `${monday.getFullYear()}-${monday.getMonth()}-${monday.getDate()}`;
     let group = byKey.get(key);
     if (!group) {
-      group = { key, label: weekLabel(monday), runKm: 0, items: [] };
+      group = { key, label: weekLabel(monday, lang), items: [], km: {}, seconds: {}, count: {} };
       byKey.set(key, group);
       groups.push(group);
     }
     group.items.push(activity);
-    if (isRunSport(activity.sport_type)) group.runKm += activity.distance_km ?? 0;
+    const category = sportCategory(activity.sport_type);
+    group.km[category] = (group.km[category] ?? 0) + (activity.distance_km ?? 0);
+    group.seconds[category] = (group.seconds[category] ?? 0) + (activity.moving_time_s ?? 0);
+    group.count[category] = (group.count[category] ?? 0) + 1;
   }
   return groups;
 }
 
-function ActivityRow({ activity }: { activity: ActivityWithSplits }) {
+/**
+ * One compact chunk per category present in the week: distance sports show km,
+ * time sports show hours, anything without either shows a count.
+ */
+function weekSummary(week: WeekGroup, t: Dict): string {
+  const parts: string[] = [];
+  for (const { key } of SPORT_CATEGORIES) {
+    const n = week.count[key] ?? 0;
+    if (n === 0) continue;
+    const km = week.km[key] ?? 0;
+    const seconds = week.seconds[key] ?? 0;
+    const value = km > 0.05 ? fmtKm(km, 1) : seconds > 0 ? fmtHoursMin(seconds) : `${n}x`;
+    parts.push(`${value} ${t.sports[key].toLowerCase()}`);
+  }
+  return parts.join(" · ") || `${week.items.length} ${t.words.activities}`;
+}
+
+function ActivityRow({
+  activity,
+  lang,
+  t,
+}: {
+  activity: ActivityWithSplits;
+  lang: Lang;
+  t: Dict;
+}) {
   const run = isRunSport(activity.sport_type);
   const statParts = [
     activity.distance_km ? fmtKm(activity.distance_km) : null,
@@ -62,14 +104,14 @@ function ActivityRow({ activity }: { activity: ActivityWithSplits }) {
         className="group -mx-2 grid grid-cols-[74px_minmax(0,1fr)_auto] items-center gap-x-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-accent/50 lg:grid-cols-[74px_minmax(0,1.35fr)_minmax(0,1fr)_minmax(0,1fr)_92px_minmax(0,0.85fr)]"
       >
         <span className="font-mono text-xs whitespace-nowrap tabular-nums text-muted-foreground">
-          {fmtDate(activity.started_at)}
+          {fmtDate(activity.started_at, lang)}
         </span>
 
         <span className="min-w-0">
           <span className="flex items-center gap-1.5">
             <SportIcon sport={activity.sport_type} className="shrink-0" />
             <span className="truncate text-sm font-medium transition-colors group-hover:text-primary">
-              {activity.name ?? "Untitled activity"}
+              {activity.name ?? t.log.untitled}
             </span>
           </span>
           <span className="mt-0.5 block truncate font-mono text-xs tabular-nums text-muted-foreground">
@@ -77,17 +119,17 @@ function ActivityRow({ activity }: { activity: ActivityWithSplits }) {
           </span>
         </span>
 
-        <span className="hidden min-w-0 truncate font-display text-[13px] text-muted-foreground italic lg:block">
+        <span className="hidden min-w-0 truncate text-[13px] text-muted-foreground italic lg:block">
           {activity.workout_notes ?? ""}
         </span>
 
-        <span className="hidden min-w-0 truncate font-display text-[13px] text-muted-foreground italic lg:block">
+        <span className="hidden min-w-0 truncate text-[13px] text-muted-foreground italic lg:block">
           {activity.health_notes ?? ""}
         </span>
 
         <span className="justify-self-start">
           {activity.feeling ? (
-            <FeelingBadge feeling={activity.feeling} />
+            <FeelingBadge feeling={activity.feeling} label={t.feelings[activity.feeling]} />
           ) : (
             <span aria-hidden className="text-xs text-muted-foreground/40">
               –
@@ -120,27 +162,62 @@ function ActivityRow({ activity }: { activity: ActivityWithSplits }) {
   );
 }
 
-export default function TrainingLogPage() {
-  const pending = countPending();
-  const activities = listConfirmedActivities();
-  const weeks = groupByWeek(activities);
-  const totalKm = activities.reduce((acc, a) => acc + (a.distance_km ?? 0), 0);
-  const connected = isStravaConnected();
+export default async function TrainingLogPage({ searchParams }: PageProps<"/">) {
+  const params = await searchParams;
+  const { lang, t } = await getDict();
+  const pending = await countPending();
+  const activities = await listConfirmedActivities();
+  const connected = await isStravaConnected();
   const configured = stravaConfigured();
+
+  const counts = new Map<SportCategory, number>();
+  for (const activity of activities) {
+    const category = sportCategory(activity.sport_type);
+    counts.set(category, (counts.get(category) ?? 0) + 1);
+  }
+
+  const rawSport = typeof params.sport === "string" ? params.sport : "all";
+  const filter: SportCategory | "all" = SPORT_CATEGORIES.some(
+    (c) => c.key === rawSport && (counts.get(c.key) ?? 0) > 0
+  )
+    ? (rawSport as SportCategory)
+    : "all";
+
+  const visible =
+    filter === "all"
+      ? activities
+      : activities.filter((a) => sportCategory(a.sport_type) === filter);
+  const weeks = groupByWeek(visible, lang);
+  const totalKm = visible.reduce((acc, a) => acc + (a.distance_km ?? 0), 0);
+  const availableCategories = SPORT_CATEGORIES.filter((c) => (counts.get(c.key) ?? 0) > 0);
+  const filterLabel = filter === "all" ? null : t.sports[filter].toLowerCase();
+  const oldest = visible[visible.length - 1];
+  const oldestDate = oldest ? oldest.started_at ?? oldest.created_at : null;
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-display text-3xl font-semibold tracking-tight">Training log</h1>
+          <h1 className="font-display text-4xl font-bold uppercase">{t.log.title}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {activities.length === 0 ? (
-              "Nothing confirmed yet."
+            {visible.length === 0 ? (
+              t.log.empty
             ) : (
               <>
-                {activities.length} confirmed {activities.length === 1 ? "activity" : "activities"}
-                <span aria-hidden> · </span>
-                <span className="font-mono tabular-nums">{fmtKm(totalKm, 0)}</span>
+                {visible.length} {filterLabel ?? t.words.confirmed}{" "}
+                {visible.length === 1 ? t.words.activity : t.words.activities}
+                {oldestDate ? (
+                  <>
+                    {" "}
+                    {t.words.since} {fmtDateWithYear(oldestDate, lang)}
+                  </>
+                ) : null}
+                {totalKm > 0 ? (
+                  <>
+                    <span aria-hidden> · </span>
+                    <span className="font-mono tabular-nums">{fmtKm(totalKm, 0)}</span>
+                  </>
+                ) : null}
               </>
             )}
           </p>
@@ -153,62 +230,94 @@ export default function TrainingLogPage() {
         </div>
       ) : null}
 
+      {activities.length > 0 && availableCategories.length > 1 ? (
+        <nav aria-label="Filter by sport" className="mt-5 flex flex-wrap items-center gap-1.5">
+          <FilterPill
+            href="/"
+            active={filter === "all"}
+            label={t.log.all}
+            count={activities.length}
+          />
+          {availableCategories.map((c) => (
+            <FilterPill
+              key={c.key}
+              href={`/?sport=${c.key}`}
+              active={filter === c.key}
+              label={t.sports[c.key]}
+              count={counts.get(c.key) ?? 0}
+            />
+          ))}
+        </nav>
+      ) : null}
+
       {activities.length === 0 ? (
         <div className="mt-6">
           {pending > 0 ? (
             <EmptyState
               icon={FootprintsIcon}
-              title="Your log starts in the review queue"
-              description="Confirm the synced activities waiting for review and they will show up here."
+              title={t.log.emptyQueueTitle}
+              description={t.log.emptyQueueBody}
             >
               <Button asChild>
-                <Link href="/review">Go to review</Link>
+                <Link href="/review">{t.log.goToReview}</Link>
               </Button>
             </EmptyState>
           ) : !configured || !connected ? (
             <EmptyState
               icon={CableIcon}
-              title="Connect Strava to start your log"
-              description={
-                configured
-                  ? "Link your Strava account and your activities will sync into the review queue."
-                  : "Add your Strava API keys, connect your account, and your activities will sync into the review queue."
-              }
+              title={t.log.connectTitle}
+              description={configured ? t.log.connectBodyConfigured : t.log.connectBodyMissing}
             >
               <Button asChild>
-                <Link href="/settings">Open Settings</Link>
+                <Link href="/settings">{t.log.openSettings}</Link>
               </Button>
             </EmptyState>
           ) : (
             <EmptyState
               icon={RefreshCwIcon}
-              title="No activities yet"
-              description="Press Sync in the header to pull your recent Strava activities, or add a manual entry from Settings."
+              title={t.log.noActivitiesTitle}
+              description={t.log.noActivitiesBody}
             >
               <Button asChild variant="outline">
-                <Link href="/settings">Open Settings</Link>
+                <Link href="/settings">{t.log.openSettings}</Link>
               </Button>
             </EmptyState>
           )}
         </div>
+      ) : visible.length === 0 ? (
+        <div className="mt-6">
+          <EmptyState
+            icon={SearchXIcon}
+            title={fillStr(t.log.noMatchTitle, { category: filterLabel ?? "" })}
+            description={t.log.noMatchBody}
+          >
+            <Button asChild variant="outline">
+              <Link href="/">{t.log.showEverything}</Link>
+            </Button>
+          </EmptyState>
+        </div>
       ) : (
-        <div className="mt-6 space-y-8">
-          {weeks.map((week) => (
-            <section key={week.key}>
-              <header className="flex items-baseline justify-between gap-4 border-b pb-2">
-                <h2 className="font-display text-base font-medium italic">{week.label}</h2>
-                {week.runKm > 0 ? (
-                  <span className="font-mono text-xs tabular-nums text-muted-foreground">
-                    {fmtKm(week.runKm)} run
-                  </span>
-                ) : null}
-              </header>
-              <ul className="mt-1.5 divide-y divide-border/50">
+        <div className="mt-6 space-y-4">
+          {weeks.map((week, index) => (
+            <details key={week.key} open={index < 4} className="group">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 border-b pb-2 select-none [&::-webkit-details-marker]:hidden">
+                <h2 className="flex items-center gap-1.5 font-display text-base font-medium italic">
+                  <ChevronRightIcon
+                    aria-hidden
+                    className="size-3.5 shrink-0 text-muted-foreground/70 transition-transform group-open:rotate-90"
+                  />
+                  {week.label}
+                </h2>
+                <span className="text-right font-mono text-xs tabular-nums text-muted-foreground">
+                  {weekSummary(week, t)}
+                </span>
+              </summary>
+              <ul className="mt-1.5 mb-4 divide-y divide-border/50">
                 {week.items.map((activity) => (
-                  <ActivityRow key={activity.id} activity={activity} />
+                  <ActivityRow key={activity.id} activity={activity} lang={lang} t={t} />
                 ))}
               </ul>
-            </section>
+            </details>
           ))}
         </div>
       )}

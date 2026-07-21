@@ -2,21 +2,9 @@
 
 import { XIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/components/i18n-provider";
 import { FEELINGS } from "@/lib/feelings";
 import type { Feeling } from "@/lib/types";
-
-const RPE_HINTS: Record<number, string> = {
-  1: "very easy",
-  2: "easy",
-  3: "easy",
-  4: "somewhat hard",
-  5: "hard",
-  6: "hard",
-  7: "very hard",
-  8: "very hard",
-  9: "near max",
-  10: "all out",
-};
 
 export function RpeControl({
   value,
@@ -25,9 +13,10 @@ export function RpeControl({
   value: number | null;
   onChange: (value: number | null) => void;
 }) {
+  const { t } = useI18n();
   return (
     <div>
-      <div className="flex items-center gap-1" role="radiogroup" aria-label="RPE 1 to 10">
+      <div className="flex items-center gap-1" role="radiogroup" aria-label="RPE 1-10">
         {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
           <button
             key={n}
@@ -50,18 +39,18 @@ export function RpeControl({
         {value != null ? (
           <>
             <span>
-              RPE {value} · {RPE_HINTS[value]}
+              RPE {value} · {t.rpeHints[value]}
             </span>
             <button
               type="button"
               onClick={() => onChange(null)}
               className="inline-flex items-center gap-0.5 text-muted-foreground/70 transition-colors hover:text-foreground"
             >
-              <XIcon className="size-3" aria-hidden /> clear
+              <XIcon className="size-3" aria-hidden /> {t.review.clear}
             </button>
           </>
         ) : (
-          <span className="text-muted-foreground/60">How hard did it feel, 1 to 10?</span>
+          <span className="text-muted-foreground/60">{t.review.rpeEmptyHint}</span>
         )}
       </div>
     </div>
@@ -75,8 +64,9 @@ export function FeelingControl({
   value: Feeling | null;
   onChange: (value: Feeling | null) => void;
 }) {
+  const { t } = useI18n();
   return (
-    <div className="grid grid-cols-5 gap-1" role="radiogroup" aria-label="Feeling">
+    <div className="grid grid-cols-5 gap-1" role="radiogroup" aria-label={t.review.feeling}>
       {FEELINGS.map((f) => (
         <button
           key={f.value}
@@ -94,7 +84,7 @@ export function FeelingControl({
           <span aria-hidden className="text-base leading-none">
             {f.emoji}
           </span>
-          {f.label}
+          {t.feelings[f.value]}
         </button>
       ))}
     </div>

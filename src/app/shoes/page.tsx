@@ -4,14 +4,16 @@ import { EmptyState } from "@/components/empty-state";
 import { ShoeCard } from "@/components/shoe-card";
 import { ShoeDialog } from "@/components/shoe-dialog";
 import { listShoes } from "@/lib/db";
+import { getDict } from "@/lib/lang";
 import { isStravaConnected, tryFetchGear } from "@/lib/strava";
 import { fmtKm } from "@/lib/format";
 
 export const metadata = { title: "Shoes" };
 
 export default async function ShoesPage() {
-  const shoes = listShoes();
-  const connected = isStravaConnected();
+  const { t } = await getDict();
+  const shoes = await listShoes();
+  const connected = await isStravaConnected();
   const gear = await tryFetchGear();
   const gearNameById = new Map((gear ?? []).map((g) => [g.id, g.name]));
 
@@ -23,22 +25,23 @@ export default async function ShoesPage() {
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-display text-3xl font-semibold tracking-tight">Shoes</h1>
+          <h1 className="font-display text-4xl font-bold uppercase">{t.shoesPage.title}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {shoes.length === 0 ? (
-              "No shoes in the rack yet."
+              t.shoesPage.empty
             ) : (
               <>
-                {shoes.length} {shoes.length === 1 ? "shoe" : "shoes"}
+                {shoes.length} {t.nav.shoes.toLowerCase()}
                 <span aria-hidden> · </span>
-                <span className="font-mono tabular-nums">{fmtKm(totalKm, 0)}</span> on their soles
+                <span className="font-mono tabular-nums">{fmtKm(totalKm, 0)}</span>{" "}
+                {t.shoesPage.countSuffix}
               </>
             )}
           </p>
         </div>
         <ShoeDialog gearOptions={gear} connected={connected}>
           <Button>
-            <PlusIcon data-icon="inline-start" /> Add shoe
+            <PlusIcon data-icon="inline-start" /> {t.shoesPage.addShoe}
           </Button>
         </ShoeDialog>
       </div>
@@ -47,12 +50,12 @@ export default async function ShoesPage() {
         <div className="mt-6">
           <EmptyState
             icon={FootprintsIcon}
-            title="Add your first shoe"
-            description="Track mileage per shoe, split runs across pairs, and see when each one is due for retirement."
+            title={t.shoesPage.firstShoeTitle}
+            description={t.shoesPage.firstShoeBody}
           >
             <ShoeDialog gearOptions={gear} connected={connected}>
               <Button>
-                <PlusIcon data-icon="inline-start" /> Add shoe
+                <PlusIcon data-icon="inline-start" /> {t.shoesPage.addShoe}
               </Button>
             </ShoeDialog>
           </EmptyState>
@@ -69,14 +72,15 @@ export default async function ShoesPage() {
                   shoe.strava_gear_id ? gearNameById.get(shoe.strava_gear_id) ?? null : null
                 }
                 connected={connected}
+                t={t}
               />
             ))}
           </div>
 
           {retired.length > 0 ? (
             <section className="mt-10">
-              <h2 className="font-display text-lg font-medium italic text-muted-foreground">
-                Retired
+              <h2 className="font-display text-lg font-semibold italic text-muted-foreground">
+                {t.shoesPage.retiredSection}
               </h2>
               <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {retired.map((shoe) => (
@@ -88,6 +92,7 @@ export default async function ShoesPage() {
                       shoe.strava_gear_id ? gearNameById.get(shoe.strava_gear_id) ?? null : null
                     }
                     connected={connected}
+                    t={t}
                   />
                 ))}
               </div>

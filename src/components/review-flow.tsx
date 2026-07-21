@@ -23,6 +23,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { EmptyState } from "@/components/empty-state";
 import { FeelingControl, RpeControl } from "@/components/journal-controls";
 import { SportIcon } from "@/components/sport-icon";
+import { useI18n } from "@/components/i18n-provider";
 import {
   SplitsEditor,
   newRowKey,
@@ -39,6 +40,7 @@ import {
   fmtPace,
   fmtTime,
 } from "@/lib/format";
+import { fill, fillStr, splitErrorText } from "@/lib/i18n";
 import { isRunSport, validateSplits } from "@/lib/validate";
 import type { ActivityWithSplits, Feeling, ShoeOption } from "@/lib/types";
 
@@ -84,7 +86,7 @@ function Stat({ label, value }: { label: string; value: string }) {
       <div className="text-[11px] font-medium tracking-wider text-muted-foreground uppercase">
         {label}
       </div>
-      <div className="mt-0.5 truncate font-mono text-sm font-medium tabular-nums">{value}</div>
+      <div className="mt-0.5 truncate font-display text-lg font-semibold">{value}</div>
     </div>
   );
 }
@@ -97,6 +99,7 @@ export function ReviewFlow({
   shoes: ShoeOption[];
 }) {
   const router = useRouter();
+  const { lang, t } = useI18n();
   const [queue, setQueue] = useState<ActivityWithSplits[]>(serverItems);
   const [index, setIndex] = useState(0);
   const [forms, setForms] = useState<Record<number, FormState>>({});
@@ -114,6 +117,7 @@ export function ReviewFlow({
 
   const splitsPayload = useMemo(() => (form ? rowsToSplits(form.rows) : []), [form]);
   const validationError = current && form ? validateSplits(current, splitsPayload) : null;
+  const validationMessage = validationError ? splitErrorText(validationError, t) : null;
 
   function patchForm(patch: Partial<FormState>) {
     if (!current) return;
@@ -129,8 +133,8 @@ export function ReviewFlow({
 
   function confirmCurrent() {
     if (!current || !form || pending) return;
-    if (validationError) {
-      toast.error(validationError);
+    if (validationMessage) {
+      toast.error(validationMessage);
       return;
     }
     const activity = current;
@@ -223,12 +227,18 @@ export function ReviewFlow({
         {summary.count > 0 ? (
           <div className="flex flex-col items-center rounded-xl border bg-card px-6 py-14 text-center">
             <CheckCircle2Icon className="size-10 text-positive" aria-hidden />
-            <h2 className="mt-4 font-display text-3xl font-semibold tracking-tight">
-              All caught up
+            <h2 className="mt-4 font-display text-3xl font-bold uppercase">
+              {t.review.caughtUp}
             </h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              You confirmed {summary.count} {summary.count === 1 ? "activity" : "activities"}
-              {summary.totalKm > 0 ? <> covering {fmtKm(summary.totalKm)}</> : null}.
+              {fillStr(t.review.confirmedSummary, {
+                n: summary.count,
+                noun: summary.count === 1 ? t.words.activity : t.words.activities,
+              })}
+              {summary.totalKm > 0 ? (
+                <> {fillStr(t.review.covering, { km: fmtKm(summary.totalKm) })}</>
+              ) : null}
+              .
             </p>
             {Object.keys(summary.perShoe).length > 0 ? (
               <dl className="mt-6 w-full max-w-sm space-y-1.5 text-sm">
@@ -249,7 +259,7 @@ export function ReviewFlow({
             ) : null}
             <div className="mt-8 flex items-center gap-2">
               <Button asChild>
-                <Link href="/">Back to the log</Link>
+                <Link href="/">{t.review.backToLog}</Link>
               </Button>
               {freshArrivals.length > 0 ? (
                 <Button
@@ -259,19 +269,15 @@ export function ReviewFlow({
                     setIndex(0);
                   }}
                 >
-                  Review {freshArrivals.length} more
+                  {fillStr(t.review.reviewMore, { n: freshArrivals.length })}
                 </Button>
               ) : null}
             </div>
           </div>
         ) : (
-          <EmptyState
-            icon={InboxIcon}
-            title="All caught up"
-            description="New activities land here after a sync. Confirm them to add mileage to your shoes."
-          >
+          <EmptyState icon={InboxIcon} title={t.review.caughtUp} description={t.review.emptyBody}>
             <Button asChild variant="outline">
-              <Link href="/">Back to the log</Link>
+              <Link href="/">{t.review.backToLog}</Link>
             </Button>
           </EmptyState>
         )}
@@ -292,7 +298,7 @@ export function ReviewFlow({
       <div className="mb-4 flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <span className="font-mono text-sm tabular-nums text-muted-foreground">
-            {summary.count + index + 1} of {sessionTotal}
+            {summary.count + index + 1} {t.review.of} {sessionTotal}
           </span>
           {sessionTotal <= 30 ? (
             <div className="flex items-center gap-1" aria-hidden>
@@ -316,7 +322,7 @@ export function ReviewFlow({
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label="Previous activity"
+            aria-label={t.review.previous}
             disabled={index === 0}
             onClick={() => goto(index - 1)}
           >
@@ -325,7 +331,7 @@ export function ReviewFlow({
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label="Next activity"
+            aria-label={t.review.next}
             disabled={index >= queue.length - 1}
             onClick={() => goto(index + 1)}
           >
@@ -339,24 +345,27 @@ export function ReviewFlow({
           <div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <SportIcon sport={current.sport_type} />
-              <span>{current.sport_type ?? "Activity"}</span>
+              <span>{current.sport_type ?? ""}</span>
               <span aria-hidden>·</span>
               <span className="font-mono tabular-nums">
-                {fmtDate(current.started_at)}
+                {fmtDate(current.started_at, lang)}
                 {current.started_at ? `, ${fmtTime(current.started_at)}` : ""}
               </span>
             </div>
             <h2 className="mt-1.5 font-display text-2xl font-semibold tracking-tight">
-              {current.name ?? "Untitled activity"}
+              {current.name ?? t.log.untitled}
             </h2>
           </div>
 
           <div className="grid grid-cols-3 gap-x-4 gap-y-3 sm:grid-cols-5">
-            <Stat label="Distance" value={fmtKm(distance, distance >= 100 ? 0 : 2)} />
-            {run ? <Stat label="Pace" value={fmtPace(current.avg_pace_s_per_km)} /> : null}
-            <Stat label="Time" value={fmtDuration(current.moving_time_s)} />
-            <Stat label="Heart rate" value={fmtHr(current.avg_hr)} />
-            <Stat label="Elevation" value={fmtElev(current.elevation_gain_m)} />
+            <Stat
+              label={t.review.distance}
+              value={fmtKm(distance, distance >= 100 ? 0 : 2)}
+            />
+            {run ? <Stat label={t.review.pace} value={fmtPace(current.avg_pace_s_per_km)} /> : null}
+            <Stat label={t.review.time} value={fmtDuration(current.moving_time_s)} />
+            <Stat label={t.review.heartRate} value={fmtHr(current.avg_hr)} />
+            <Stat label={t.review.elevation} value={fmtElev(current.elevation_gain_m)} />
           </div>
 
           <Separator />
@@ -364,12 +373,12 @@ export function ReviewFlow({
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
               <Label className="text-xs tracking-wider text-muted-foreground uppercase">
-                {run ? "Shoes" : "Shoes (optional)"}
+                {run ? t.review.shoes : t.review.shoesOptional}
               </Label>
               {hadUnmatchedShoe ? (
                 <span className="inline-flex items-center gap-1 text-xs text-wear-worn">
                   <TriangleAlertIcon className="size-3.5" aria-hidden />
-                  No shoe matched from Strava gear
+                  {t.review.noGearMatch}
                 </span>
               ) : null}
             </div>
@@ -388,13 +397,13 @@ export function ReviewFlow({
           <div className="grid gap-5 sm:grid-cols-2">
             <div className="space-y-2">
               <Label className="text-xs tracking-wider text-muted-foreground uppercase">
-                Effort (RPE)
+                {t.review.effort}
               </Label>
               <RpeControl value={form.rpe} onChange={(rpe) => patchForm({ rpe })} />
             </div>
             <div className="space-y-2">
               <Label className="text-xs tracking-wider text-muted-foreground uppercase">
-                Feeling
+                {t.review.feeling}
               </Label>
               <FeelingControl
                 value={form.feeling}
@@ -409,13 +418,13 @@ export function ReviewFlow({
                 htmlFor="workout-notes"
                 className="text-xs tracking-wider text-muted-foreground uppercase"
               >
-                Workout notes
+                {t.review.workoutNotes}
               </Label>
               <Textarea
                 id="workout-notes"
                 value={form.workoutNotes}
                 onChange={(e) => patchForm({ workoutNotes: e.target.value })}
-                placeholder="How did it go? Execution, splits, fueling..."
+                placeholder={t.review.workoutPlaceholder}
                 className="min-h-24 resize-y"
               />
             </div>
@@ -424,13 +433,13 @@ export function ReviewFlow({
                 htmlFor="health-notes"
                 className="text-xs tracking-wider text-muted-foreground uppercase"
               >
-                Health notes
+                {t.review.healthNotes}
               </Label>
               <Textarea
                 id="health-notes"
                 value={form.healthNotes}
                 onChange={(e) => patchForm({ healthNotes: e.target.value })}
-                placeholder="Body, sleep, niggles, general health..."
+                placeholder={t.review.healthPlaceholder}
                 className="min-h-24 resize-y"
               />
             </div>
@@ -441,24 +450,30 @@ export function ReviewFlow({
               size="lg"
               className="w-full"
               onClick={confirmCurrent}
-              disabled={pending || !!validationError || activeShoes.length === 0}
+              disabled={pending || !!validationMessage || activeShoes.length === 0}
             >
               {pending ? (
                 <Loader2Icon className="animate-spin" />
               ) : (
                 <CheckIcon data-icon="inline-start" />
               )}
-              Confirm activity
+              {t.review.confirm}
               <kbd className="kbd ml-1 border-primary-foreground/30 bg-transparent text-primary-foreground/80">
                 ↵
               </kbd>
             </Button>
-            {validationError ? (
-              <p className="text-center text-xs text-wear-worn">{validationError}</p>
+            {validationMessage ? (
+              <p className="text-center text-xs text-wear-worn">{validationMessage}</p>
             ) : null}
             {activeShoes.length === 0 && run ? (
               <p className="text-center text-xs text-wear-worn">
-                Add a shoe first, from the <Link href="/shoes" className="underline">Shoes</Link> page.
+                {fill(t.review.addShoeFirst, {
+                  link: (
+                    <Link href="/shoes" className="underline">
+                      {t.nav.shoes}
+                    </Link>
+                  ),
+                })}
               </p>
             ) : null}
           </div>
@@ -467,20 +482,20 @@ export function ReviewFlow({
 
       <p className="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
         <span className="inline-flex items-center gap-1.5">
-          <kbd className="kbd">↵</kbd> confirm
+          <kbd className="kbd">↵</kbd> {t.review.kbdConfirm}
         </span>
         <span className="inline-flex items-center gap-1.5">
           <kbd className="kbd">←</kbd>
-          <kbd className="kbd">→</kbd> navigate
+          <kbd className="kbd">→</kbd> {t.review.kbdNavigate}
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <kbd className="kbd">E</kbd> edit splits
+          <kbd className="kbd">E</kbd> {t.review.kbdSplits}
         </span>
         <span className="inline-flex items-center gap-1.5">
           <kbd className="kbd">1</kbd>–<kbd className="kbd">0</kbd> RPE
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <FootprintsIcon className="size-3" aria-hidden /> confirming adds mileage to your shoes
+          <FootprintsIcon className="size-3" aria-hidden /> {t.review.kbdMileage}
         </span>
       </p>
     </div>

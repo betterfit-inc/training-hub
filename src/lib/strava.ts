@@ -21,14 +21,14 @@ export function stravaConfigured(): boolean {
   return !!(process.env.STRAVA_CLIENT_ID && process.env.STRAVA_CLIENT_SECRET);
 }
 
-export function isStravaConnected(): boolean {
-  return getStravaAuth() !== null;
+export async function isStravaConnected(): Promise<boolean> {
+  return (await getStravaAuth()) !== null;
 }
 
 /** True when connected and the last sync is more than an hour old (or never ran). */
-export function shouldAutoSync(): boolean {
-  if (!stravaConfigured() || !isStravaConnected()) return false;
-  const lastSync = getMeta("last_sync_at");
+export async function shouldAutoSync(): Promise<boolean> {
+  if (!stravaConfigured() || !(await isStravaConnected())) return false;
+  const lastSync = await getMeta("last_sync_at");
   return !lastSync || Date.now() - Date.parse(lastSync) > 60 * 60 * 1000;
 }
 
@@ -71,7 +71,7 @@ async function requestToken(params: Record<string, string>): Promise<TokenRespon
 
 export async function exchangeCode(code: string): Promise<void> {
   const token = await requestToken({ grant_type: "authorization_code", code });
-  saveStravaAuth({
+  await saveStravaAuth({
     access_token: token.access_token,
     refresh_token: token.refresh_token,
     expires_at: token.expires_at,
@@ -80,13 +80,13 @@ export async function exchangeCode(code: string): Promise<void> {
     const name = [token.athlete.firstname, token.athlete.lastname]
       .filter(Boolean)
       .join(" ");
-    if (name) setMeta("athlete_name", name);
+    if (name) await setMeta("athlete_name", name);
   }
 }
 
 /** Returns a valid access token, refreshing it first when close to expiry. */
 async function getAccessToken(): Promise<string> {
-  const auth = getStravaAuth();
+  const auth = await getStravaAuth();
   if (!auth) throw new Error("Strava is not connected.");
   const now = Math.floor(Date.now() / 1000);
   if (auth.expires_at > now + 120) return auth.access_token;
@@ -94,7 +94,7 @@ async function getAccessToken(): Promise<string> {
     grant_type: "refresh_token",
     refresh_token: auth.refresh_token,
   });
-  saveStravaAuth({
+  await saveStravaAuth({
     access_token: token.access_token,
     refresh_token: token.refresh_token,
     expires_at: token.expires_at,
@@ -141,7 +141,7 @@ export async function fetchAthleteGear(): Promise<StravaGear[]> {
 
 /** Gear list for dropdowns; null when not connected or the request fails. */
 export async function tryFetchGear(): Promise<StravaGear[] | null> {
-  if (!stravaConfigured() || !isStravaConnected()) return null;
+  if (!stravaConfigured() || !(await isStravaConnected())) return null;
   try {
     return await fetchAthleteGear();
   } catch {
@@ -180,8 +180,8 @@ export interface SyncResult {
  * review queue with one pre-filled split.
  */
 export async function syncActivities(): Promise<SyncResult> {
-  const afterEpoch = latestSyncedStartEpoch();
-  const baselineIso = getMeta("baseline_date");
+  const afterEpoch = await latestSyncedStartEpoch();
+  const baselineIso = await getMeta("baseline_date");
   const baselineMs = baselineIso ? Date.parse(baselineIso) : 0;
 
   let imported = 0;
@@ -200,7 +200,7 @@ export async function syncActivities(): Promise<SyncResult> {
 
     for (const activity of batch) {
       if (!activity.id || !activity.start_date) continue;
-      if (activityExistsByStravaId(activity.id)) continue;
+      if (await activityExistsByStravaId(activity.id)) continue;
 
       const distanceKm = activity.distance ? round2(activity.distance / 1000) : 0;
       const movingS = activity.moving_time ?? null;
@@ -218,7 +218,9 @@ export async function syncActivities(): Promise<SyncResult> {
         status = "confirmed";
       } else {
         status = "pending_review";
-        const matchedShoeId = activity.gear_id ? findShoeIdByGear(activity.gear_id) : null;
+        const matchedShoeId = activity.gear_id
+          ? await findShoeIdByGear(activity.gear_id)
+          : null;
         if (isRunSport(sport) && distanceKm > 0) {
           splits = [{ shoe_id: matchedShoeId, km: distanceKm }];
         } else if (matchedShoeId && distanceKm > 0) {
@@ -227,7 +229,7 @@ export async function syncActivities(): Promise<SyncResult> {
         pendingNew++;
       }
 
-      insertSyncedActivity(
+      await insertSyncedActivity(
         {
           strava_id: activity.id,
           name: activity.name ?? null,
@@ -249,6 +251,6 @@ export async function syncActivities(): Promise<SyncResult> {
     if (batch.length < perPage) break;
   }
 
-  setMeta("last_sync_at", new Date().toISOString());
-  return { imported, pendingNew, pendingTotal: countPending() };
+  await setMeta("last_sync_at", new Date().toISOString());
+  return { imported, pendingNew, pendingTotal: await countPending() };
 }

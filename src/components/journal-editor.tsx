@@ -9,21 +9,20 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { FeelingBadge } from "@/components/feeling-badge";
 import { FeelingControl, RpeControl } from "@/components/journal-controls";
+import { useI18n } from "@/components/i18n-provider";
 import { updateJournalAction } from "@/lib/actions";
 import type { Activity, Feeling } from "@/lib/types";
 
-function NoteBlock({ label, text }: { label: string; text: string | null }) {
+function NoteBlock({ label, text, emptyText }: { label: string; text: string | null; emptyText: string }) {
   return (
     <div>
       <div className="text-[11px] font-medium tracking-wider text-muted-foreground uppercase">
         {label}
       </div>
       {text ? (
-        <p className="mt-1 font-display text-[15px] leading-relaxed italic whitespace-pre-wrap">
-          {text}
-        </p>
+        <p className="mt-1 text-[15px] leading-relaxed italic whitespace-pre-wrap">{text}</p>
       ) : (
-        <p className="mt-1 text-sm text-muted-foreground/60">Nothing noted.</p>
+        <p className="mt-1 text-sm text-muted-foreground/60">{emptyText}</p>
       )}
     </div>
   );
@@ -31,6 +30,7 @@ function NoteBlock({ label, text }: { label: string; text: string | null }) {
 
 export function JournalEditor({ activity }: { activity: Activity }) {
   const router = useRouter();
+  const { t } = useI18n();
   const [editing, setEditing] = useState(false);
   const [rpe, setRpe] = useState<number | null>(activity.rpe);
   const [feeling, setFeeling] = useState<Feeling | null>(activity.feeling);
@@ -59,7 +59,7 @@ export function JournalEditor({ activity }: { activity: Activity }) {
         toast.error(result.error);
         return;
       }
-      toast.success("Journal saved");
+      toast.success(t.toasts.journalSaved);
       setEditing(false);
       router.refresh();
     });
@@ -75,27 +75,35 @@ export function JournalEditor({ activity }: { activity: Activity }) {
       <div className="space-y-4">
         <div className="flex items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
-            {activity.feeling ? <FeelingBadge feeling={activity.feeling} /> : null}
+            {activity.feeling ? (
+              <FeelingBadge feeling={activity.feeling} label={t.feelings[activity.feeling]} />
+            ) : null}
             {activity.rpe != null ? (
               <span className="rounded-full bg-muted px-2 py-0.5 font-mono text-xs font-medium tabular-nums">
                 RPE {activity.rpe}
               </span>
             ) : null}
             {empty ? (
-              <span className="text-sm text-muted-foreground/60">
-                No journal entry for this activity yet.
-              </span>
+              <span className="text-sm text-muted-foreground/60">{t.detail.noJournal}</span>
             ) : null}
           </div>
           <Button variant="ghost" size="sm" onClick={startEditing}>
             <PencilIcon data-icon="inline-start" />
-            {empty ? "Add notes" : "Edit"}
+            {empty ? t.detail.addNotes : t.detail.edit}
           </Button>
         </div>
         {!empty ? (
           <div className="grid gap-4 sm:grid-cols-2">
-            <NoteBlock label="Workout" text={activity.workout_notes} />
-            <NoteBlock label="Health" text={activity.health_notes} />
+            <NoteBlock
+              label={t.detail.workout}
+              text={activity.workout_notes}
+              emptyText={t.detail.nothingNoted}
+            />
+            <NoteBlock
+              label={t.detail.health}
+              text={activity.health_notes}
+              emptyText={t.detail.nothingNoted}
+            />
           </div>
         ) : null}
       </div>
@@ -107,12 +115,14 @@ export function JournalEditor({ activity }: { activity: Activity }) {
       <div className="grid gap-5 sm:grid-cols-2">
         <div className="space-y-2">
           <Label className="text-xs tracking-wider text-muted-foreground uppercase">
-            Effort (RPE)
+            {t.review.effort}
           </Label>
           <RpeControl value={rpe} onChange={setRpe} />
         </div>
         <div className="space-y-2">
-          <Label className="text-xs tracking-wider text-muted-foreground uppercase">Feeling</Label>
+          <Label className="text-xs tracking-wider text-muted-foreground uppercase">
+            {t.review.feeling}
+          </Label>
           <FeelingControl value={feeling} onChange={setFeeling} />
         </div>
       </div>
@@ -122,7 +132,7 @@ export function JournalEditor({ activity }: { activity: Activity }) {
             htmlFor="edit-workout-notes"
             className="text-xs tracking-wider text-muted-foreground uppercase"
           >
-            Workout notes
+            {t.review.workoutNotes}
           </Label>
           <Textarea
             id="edit-workout-notes"
@@ -136,7 +146,7 @@ export function JournalEditor({ activity }: { activity: Activity }) {
             htmlFor="edit-health-notes"
             className="text-xs tracking-wider text-muted-foreground uppercase"
           >
-            Health notes
+            {t.review.healthNotes}
           </Label>
           <Textarea
             id="edit-health-notes"
@@ -149,10 +159,10 @@ export function JournalEditor({ activity }: { activity: Activity }) {
       <div className="flex items-center gap-2">
         <Button onClick={save} disabled={pending}>
           {pending ? <Loader2Icon className="animate-spin" data-icon="inline-start" /> : null}
-          Save
+          {t.detail.save}
         </Button>
         <Button variant="ghost" onClick={() => setEditing(false)} disabled={pending}>
-          Cancel
+          {t.detail.cancel}
         </Button>
       </div>
     </div>

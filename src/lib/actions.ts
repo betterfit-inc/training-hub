@@ -1,11 +1,11 @@
 "use server";
 
-import fs from "node:fs";
-import path from "node:path";
-import crypto from "node:crypto";
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
+import { dictionaries, splitErrorText, isLang, type Dict } from "./i18n";
+import { LANG_COOKIE, getLang } from "./lang";
+import { storePhoto } from "./storage";
 import {
-  UPLOADS_DIR,
   clearStravaAuth,
   createManualActivity,
   createShoe,
@@ -26,12 +26,30 @@ import type { Feeling, SplitInput } from "./types";
 
 type ActionResult = { ok: true } | { ok: false; error: string };
 
+async function dict(): Promise<Dict> {
+  return dictionaries[await getLang()];
+}
+
 function fail(error: unknown, fallback: string): { ok: false; error: string } {
   return { ok: false, error: error instanceof Error ? error.message : fallback };
 }
 
 function refreshAll() {
   revalidatePath("/", "layout");
+}
+
+// ---------------------------------------------------------------------------
+// Language
+// ---------------------------------------------------------------------------
+
+export async function setLangAction(lang: string): Promise<void> {
+  if (!isLang(lang)) return;
+  (await cookies()).set(LANG_COOKIE, lang, {
+    path: "/",
+    maxAge: 60 * 60 * 24 * 365,
+    sameSite: "lax",
+  });
+  refreshAll();
 }
 
 // ---------------------------------------------------------------------------
@@ -43,18 +61,15 @@ export type SyncActionResult =
   | { ok: false; error: string };
 
 export async function syncNowAction(): Promise<SyncActionResult> {
-  if (!stravaConfigured()) {
-    return { ok: false, error: "Set STRAVA_CLIENT_ID and STRAVA_CLIENT_SECRET first (see Settings)." };
-  }
-  if (!isStravaConnected()) {
-    return { ok: false, error: "Connect Strava from Settings first." };
-  }
+  const t = await dict();
+  if (!stravaConfigured()) return { ok: false, error: t.errors.envMissing };
+  if (!(await isStravaConnected())) return { ok: false, error: t.errors.notConnected };
   try {
     const result = await syncActivities();
     refreshAll();
     return { ok: true, ...result };
   } catch (error) {
-    return fail(error, "Sync failed.");
+    return fail(error, t.errors.syncFailed);
   }
 }
 
@@ -64,16 +79,19 @@ export async function syncNowAction(): Promise<SyncActionResult> {
 
 const FEELINGS: Feeling[] = ["great", "good", "ok", "rough", "terrible"];
 
-function normalizeJournal(input: {
-  rpe: number | null;
-  feeling: Feeling | null;
-  workoutNotes: string;
-  healthNotes: string;
-}): JournalFields | { error: string } {
+function normalizeJournal(
+  input: {
+    rpe: number | null;
+    feeling: Feeling | null;
+    workoutNotes: string;
+    healthNotes: string;
+  },
+  t: Dict
+): JournalFields | { error: string } {
   const rpe = input.rpe == null ? null : Math.round(input.rpe);
-  if (rpe != null && (rpe < 1 || rpe > 10)) return { error: "RPE must be between 1 and 10." };
+  if (rpe != null && (rpe < 1 || rpe > 10)) return { error: t.errors.invalidRpe };
   if (input.feeling != null && !FEELINGS.includes(input.feeling)) {
-    return { error: "Unknown feeling value." };
+    return { error: t.errors.invalidFeeling };
   }
   return {
     rpe,
@@ -98,23 +116,24 @@ export async function confirmActivityAction(input: {
   workoutNotes: string;
   healthNotes: string;
 }): Promise<ActionResult> {
+  const t = await dict();
   try {
-    const activity = getActivity(input.activityId);
-    if (!activity) return { ok: false, error: "Activity not found." };
-    if (activity.status === "confirmed") return { ok: false, error: "Activity is already confirmed." };
+    const activity = await getActivity(input.activityId);
+    if (!activity) return { ok: false, error: t.errors.activityNotFound };
+    if (activity.status === "confirmed") return { ok: false, error: t.errors.alreadyConfirmed };
 
     const splits = normalizeSplits(input.splits);
     const splitError = validateSplits(activity, splits);
-    if (splitError) return { ok: false, error: splitError };
+    if (splitError) return { ok: false, error: splitErrorText(splitError, t) };
 
-    const journal = normalizeJournal(input);
+    const journal = normalizeJournal(input, t);
     if ("error" in journal) return { ok: false, error: journal.error };
 
-    confirmActivity(input.activityId, journal, splits);
+    await confirmActivity(input.activityId, journal, splits);
     refreshAll();
     return { ok: true };
   } catch (error) {
-    return fail(error, "Could not confirm the activity.");
+    return fail(error, t.errors.generic);
   }
 }
 
@@ -125,16 +144,17 @@ export async function updateJournalAction(input: {
   workoutNotes: string;
   healthNotes: string;
 }): Promise<ActionResult> {
+  const t = await dict();
   try {
-    const activity = getActivity(input.activityId);
-    if (!activity) return { ok: false, error: "Activity not found." };
-    const journal = normalizeJournal(input);
+    const activity = await getActivity(input.activityId);
+    if (!activity) return { ok: false, error: t.errors.activityNotFound };
+    const journal = normalizeJournal(input, t);
     if ("error" in journal) return { ok: false, error: journal.error };
-    updateActivityJournal(input.activityId, journal);
+    await updateActivityJournal(input.activityId, journal);
     refreshAll();
     return { ok: true };
   } catch (error) {
-    return fail(error, "Could not save the notes.");
+    return fail(error, t.errors.generic);
   }
 }
 
@@ -142,17 +162,18 @@ export async function updateSplitsAction(input: {
   activityId: number;
   splits: SplitInput[];
 }): Promise<ActionResult> {
+  const t = await dict();
   try {
-    const activity = getActivity(input.activityId);
-    if (!activity) return { ok: false, error: "Activity not found." };
+    const activity = await getActivity(input.activityId);
+    if (!activity) return { ok: false, error: t.errors.activityNotFound };
     const splits = normalizeSplits(input.splits);
     const splitError = validateSplits(activity, splits);
-    if (splitError) return { ok: false, error: splitError };
-    replaceActivitySplits(input.activityId, splits);
+    if (splitError) return { ok: false, error: splitErrorText(splitError, t) };
+    await replaceActivitySplits(input.activityId, splits);
     refreshAll();
     return { ok: true };
   } catch (error) {
-    return fail(error, "Could not save the splits.");
+    return fail(error, t.errors.generic);
   }
 }
 
@@ -160,42 +181,23 @@ export async function updateSplitsAction(input: {
 // Shoes
 // ---------------------------------------------------------------------------
 
-const PHOTO_TYPES: Record<string, string> = {
-  "image/jpeg": "jpg",
-  "image/png": "png",
-  "image/webp": "webp",
-  "image/avif": "avif",
-  "image/gif": "gif",
-};
-const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
-
-async function storePhoto(file: File): Promise<string> {
-  const ext = PHOTO_TYPES[file.type];
-  if (!ext) throw new Error("Photo must be a JPEG, PNG, WebP, AVIF or GIF image.");
-  if (file.size > MAX_PHOTO_BYTES) throw new Error("Photo is too large (8 MB max).");
-  const name = `shoe-${Date.now()}-${crypto.randomBytes(4).toString("hex")}.${ext}`;
-  const buffer = Buffer.from(await file.arrayBuffer());
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-  fs.writeFileSync(path.join(UPLOADS_DIR, name), buffer);
-  return name;
-}
-
 export async function saveShoeAction(formData: FormData): Promise<ActionResult> {
+  const t = await dict();
   try {
     const idRaw = formData.get("id");
     const id = typeof idRaw === "string" && idRaw ? Number(idRaw) : null;
 
     const name = String(formData.get("name") ?? "").trim();
-    if (!name) return { ok: false, error: "The shoe needs a name." };
+    if (!name) return { ok: false, error: t.errors.shoeNeedsName };
 
     const role = String(formData.get("role") ?? "").trim() || null;
     const initialKm = Number(formData.get("initial_km") ?? 0);
     const retirementKm = Number(formData.get("retirement_km") ?? 700);
     if (!Number.isFinite(initialKm) || initialKm < 0) {
-      return { ok: false, error: "Baseline km must be zero or more." };
+      return { ok: false, error: t.errors.invalidBaseline };
     }
     if (!Number.isFinite(retirementKm) || retirementKm <= 0) {
-      return { ok: false, error: "Retirement km must be greater than zero." };
+      return { ok: false, error: t.errors.invalidRetirement };
     }
 
     const gearRaw = String(formData.get("strava_gear_id") ?? "none");
@@ -216,26 +218,27 @@ export async function saveShoeAction(formData: FormData): Promise<ActionResult> 
     };
 
     if (id) {
-      if (!getShoe(id)) return { ok: false, error: "Shoe not found." };
-      updateShoe(id, fields, photoPath);
+      if (!(await getShoe(id))) return { ok: false, error: t.errors.shoeNotFound };
+      await updateShoe(id, fields, photoPath);
     } else {
-      createShoe(fields, photoPath);
+      await createShoe(fields, photoPath);
     }
     refreshAll();
     return { ok: true };
   } catch (error) {
-    return fail(error, "Could not save the shoe.");
+    return fail(error, t.errors.generic);
   }
 }
 
 export async function setShoeRetiredAction(id: number, retired: boolean): Promise<ActionResult> {
+  const t = await dict();
   try {
-    if (!getShoe(id)) return { ok: false, error: "Shoe not found." };
-    setShoeRetired(id, retired);
+    if (!(await getShoe(id))) return { ok: false, error: t.errors.shoeNotFound };
+    await setShoeRetired(id, retired);
     refreshAll();
     return { ok: true };
   } catch (error) {
-    return fail(error, "Could not update the shoe.");
+    return fail(error, t.errors.generic);
   }
 }
 
@@ -243,13 +246,14 @@ export async function setShoeGearAction(
   shoeId: number,
   gearId: string | null
 ): Promise<ActionResult> {
+  const t = await dict();
   try {
-    if (!getShoe(shoeId)) return { ok: false, error: "Shoe not found." };
-    setShoeGear(shoeId, gearId);
+    if (!(await getShoe(shoeId))) return { ok: false, error: t.errors.shoeNotFound };
+    await setShoeGear(shoeId, gearId);
     refreshAll();
     return { ok: true };
   } catch (error) {
-    return fail(error, "Could not link the gear.");
+    return fail(error, t.errors.generic);
   }
 }
 
@@ -258,12 +262,13 @@ export async function setShoeGearAction(
 // ---------------------------------------------------------------------------
 
 export async function disconnectStravaAction(): Promise<ActionResult> {
+  const t = await dict();
   try {
-    clearStravaAuth();
+    await clearStravaAuth();
     refreshAll();
     return { ok: true };
   } catch (error) {
-    return fail(error, "Could not disconnect.");
+    return fail(error, t.errors.generic);
   }
 }
 
@@ -272,17 +277,18 @@ export async function createManualActivityAction(input: {
   km: number;
   shoeId: number;
 }): Promise<ActionResult> {
+  const t = await dict();
   try {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) {
-      return { ok: false, error: "Pick a valid date." };
+      return { ok: false, error: t.errors.invalidDate };
     }
     const km = Math.round((Number(input.km) || 0) * 100) / 100;
-    if (km === 0) return { ok: false, error: "Distance cannot be zero." };
-    if (!getShoe(input.shoeId)) return { ok: false, error: "Pick a shoe." };
-    createManualActivity({ date: input.date, km, shoe_id: input.shoeId });
+    if (km === 0) return { ok: false, error: t.toasts.zeroDistance };
+    if (!(await getShoe(input.shoeId))) return { ok: false, error: t.toasts.pickShoe };
+    await createManualActivity({ date: input.date, km, shoe_id: input.shoeId });
     refreshAll();
     return { ok: true };
   } catch (error) {
-    return fail(error, "Could not create the manual activity.");
+    return fail(error, t.errors.generic);
   }
 }

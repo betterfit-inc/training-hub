@@ -1,41 +1,49 @@
-const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
-const DAYS_LONG = [
-  "Sunday",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-] as const;
-const MONTHS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-] as const;
-const MONTHS_LONG = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-] as const;
+import type { Lang } from "./i18n";
+
+const DAYS: Record<Lang, readonly string[]> = {
+  en: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+  pt: ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"],
+};
+const DAYS_LONG: Record<Lang, readonly string[]> = {
+  en: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+  pt: ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"],
+};
+const MONTHS: Record<Lang, readonly string[]> = {
+  en: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+  pt: ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"],
+};
+const MONTHS_LONG: Record<Lang, readonly string[]> = {
+  en: [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ],
+  pt: [
+    "Janeiro",
+    "Fevereiro",
+    "Março",
+    "Abril",
+    "Maio",
+    "Junho",
+    "Julho",
+    "Agosto",
+    "Setembro",
+    "Outubro",
+    "Novembro",
+    "Dezembro",
+  ],
+};
+const THIS_WEEK: Record<Lang, string> = { en: "This week", pt: "Esta semana" };
+const LAST_WEEK: Record<Lang, string> = { en: "Last week", pt: "Semana passada" };
 
 export function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -63,6 +71,18 @@ export function fmtDuration(s: number | null | undefined): string {
   return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
+export function fmtHoursMin(s: number | null | undefined): string {
+  if (!s || s <= 0) return "–";
+  let h = Math.floor(s / 3600);
+  let m = Math.round((s % 3600) / 60);
+  if (m === 60) {
+    h += 1;
+    m = 0;
+  }
+  if (h === 0) return `${m}m`;
+  return `${h}h ${String(m).padStart(2, "0")}m`;
+}
+
 export function fmtHr(hr: number | null | undefined): string {
   if (!hr) return "–";
   return `${Math.round(hr)} bpm`;
@@ -73,16 +93,19 @@ export function fmtElev(m: number | null | undefined): string {
   return `${Math.round(m)} m`;
 }
 
-export function fmtDate(iso: string | null | undefined): string {
+export function fmtDate(iso: string | null | undefined, lang: Lang = "en"): string {
   if (!iso) return "–";
   const d = new Date(iso);
-  return `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
+  return `${DAYS[lang][d.getDay()]} ${d.getDate()} ${MONTHS[lang][d.getMonth()]}`;
 }
 
-export function fmtDateLong(iso: string | null | undefined): string {
+export function fmtDateLong(iso: string | null | undefined, lang: Lang = "en"): string {
   if (!iso) return "–";
   const d = new Date(iso);
-  return `${DAYS_LONG[d.getDay()]}, ${d.getDate()} ${MONTHS_LONG[d.getMonth()]} ${d.getFullYear()}`;
+  if (lang === "pt") {
+    return `${DAYS_LONG.pt[d.getDay()]}, ${d.getDate()} de ${MONTHS_LONG.pt[d.getMonth()]} de ${d.getFullYear()}`;
+  }
+  return `${DAYS_LONG.en[d.getDay()]}, ${d.getDate()} ${MONTHS_LONG.en[d.getMonth()]} ${d.getFullYear()}`;
 }
 
 export function fmtTime(iso: string | null | undefined): string {
@@ -91,8 +114,14 @@ export function fmtTime(iso: string | null | undefined): string {
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
-export function fmtDayMonth(d: Date): string {
-  return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+export function fmtDayMonth(d: Date, lang: Lang = "en"): string {
+  return `${d.getDate()} ${MONTHS[lang][d.getMonth()]}`;
+}
+
+export function fmtDateWithYear(iso: string | null | undefined, lang: Lang = "en"): string {
+  if (!iso) return "–";
+  const d = new Date(iso);
+  return `${d.getDate()} ${MONTHS[lang][d.getMonth()]} ${d.getFullYear()}`;
 }
 
 export function localDateInputValue(d = new Date()): string {
@@ -110,16 +139,16 @@ export function mondayOf(date: Date): Date {
   return d;
 }
 
-export function weekLabel(monday: Date, now = new Date()): string {
+export function weekLabel(monday: Date, lang: Lang = "en", now = new Date()): string {
   const thisMonday = mondayOf(now);
   const diffDays = Math.round((thisMonday.getTime() - monday.getTime()) / 86400000);
-  if (diffDays === 0) return "This week";
-  if (diffDays === 7) return "Last week";
+  if (diffDays === 0) return THIS_WEEK[lang];
+  if (diffDays === 7) return LAST_WEEK[lang];
   const sunday = new Date(monday);
   sunday.setDate(sunday.getDate() + 6);
   const sameMonth = monday.getMonth() === sunday.getMonth();
-  const left = sameMonth ? String(monday.getDate()) : fmtDayMonth(monday);
-  const right = fmtDayMonth(sunday);
+  const left = sameMonth ? String(monday.getDate()) : fmtDayMonth(monday, lang);
+  const right = fmtDayMonth(sunday, lang);
   const year = monday.getFullYear() === now.getFullYear() ? "" : ` ${monday.getFullYear()}`;
   return `${left}–${right}${year}`;
 }

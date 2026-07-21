@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useSyncExternalStore } from "react";
 import { InboxIcon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/components/i18n-provider";
+import { fill } from "@/lib/i18n";
 
 const KEY = "review-banner-dismissed";
 const EVENT = "review-banner-change";
@@ -14,6 +16,7 @@ function subscribe(callback: () => void) {
 }
 
 export function ReviewBanner({ count }: { count: number }) {
+  const { t } = useI18n();
   // sessionStorage keeps the dismissal for the browser session; the server
   // snapshot renders the banner so SSR and hydration stay consistent.
   const dismissedFor = useSyncExternalStore(
@@ -28,16 +31,18 @@ export function ReviewBanner({ count }: { count: number }) {
     <div className="flex items-center gap-3 rounded-xl border border-primary/25 bg-primary/5 px-4 py-3">
       <InboxIcon className="size-4 shrink-0 text-primary" aria-hidden />
       <p className="min-w-0 flex-1 text-sm">
-        You have <span className="font-semibold">{count}</span>{" "}
-        {count === 1 ? "activity" : "activities"} waiting for review.
+        {fill(t.banner.waiting, {
+          n: <span className="font-semibold">{count}</span>,
+          noun: count === 1 ? t.words.activity : t.words.activities,
+        })}
       </p>
       <Button asChild size="sm">
-        <Link href="/review">Review now</Link>
+        <Link href="/review">{t.banner.reviewNow}</Link>
       </Button>
       <Button
         variant="ghost"
         size="icon-sm"
-        aria-label="Dismiss"
+        aria-label={t.banner.dismiss}
         onClick={() => {
           sessionStorage.setItem(KEY, String(count));
           window.dispatchEvent(new Event(EVENT));

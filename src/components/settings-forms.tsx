@@ -14,16 +14,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useI18n } from "@/components/i18n-provider";
 import {
   createManualActivityAction,
   disconnectStravaAction,
   setShoeGearAction,
 } from "@/lib/actions";
 import { fmtKm, localDateInputValue } from "@/lib/format";
+import { fillStr } from "@/lib/i18n";
 import type { ShoeOption, StravaGear } from "@/lib/types";
 
 export function DisconnectButton() {
   const router = useRouter();
+  const { t } = useI18n();
   const [pending, startTransition] = useTransition();
 
   function disconnect() {
@@ -33,7 +36,7 @@ export function DisconnectButton() {
         toast.error(result.error);
         return;
       }
-      toast.success("Strava disconnected");
+      toast.success(t.toasts.disconnected);
       router.refresh();
     });
   }
@@ -45,7 +48,7 @@ export function DisconnectButton() {
       ) : (
         <UnplugIcon data-icon="inline-start" />
       )}
-      Disconnect
+      {t.settingsPage.disconnect}
     </Button>
   );
 }
@@ -58,6 +61,7 @@ export function GearMatcher({
   gear: StravaGear[];
 }) {
   const router = useRouter();
+  const { t } = useI18n();
 
   function link(shoeId: number, value: string) {
     const gearId = value === "none" ? null : value;
@@ -66,7 +70,7 @@ export function GearMatcher({
         toast.error(result.error);
         return;
       }
-      toast.success(gearId ? "Gear linked" : "Gear unlinked");
+      toast.success(gearId ? t.toasts.gearLinked : t.toasts.gearUnlinked);
       router.refresh();
     });
   }
@@ -78,20 +82,15 @@ export function GearMatcher({
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">{shoe.name}</p>
             {shoe.role ? (
-              <p className="truncate font-display text-xs text-muted-foreground italic">
-                {shoe.role}
-              </p>
+              <p className="truncate text-xs text-muted-foreground italic">{shoe.role}</p>
             ) : null}
           </div>
-          <Select
-            value={shoe.gearId ?? "none"}
-            onValueChange={(value) => link(shoe.id, value)}
-          >
+          <Select value={shoe.gearId ?? "none"} onValueChange={(value) => link(shoe.id, value)}>
             <SelectTrigger size="sm" className="w-52 shrink-0">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="none">Not linked</SelectItem>
+              <SelectItem value="none">{t.settingsPage.notLinked}</SelectItem>
               {gear.map((g) => (
                 <SelectItem key={g.id} value={g.id}>
                   <span className="truncate">{g.name}</span>
@@ -112,6 +111,7 @@ export function GearMatcher({
 
 export function ManualActivityForm({ shoes }: { shoes: ShoeOption[] }) {
   const router = useRouter();
+  const { t } = useI18n();
   const [date, setDate] = useState(() => localDateInputValue());
   const [km, setKm] = useState("");
   const [shoeId, setShoeId] = useState<string | undefined>(undefined);
@@ -121,11 +121,11 @@ export function ManualActivityForm({ shoes }: { shoes: ShoeOption[] }) {
     event.preventDefault();
     const kmValue = parseFloat(km);
     if (!shoeId) {
-      toast.error("Pick a shoe.");
+      toast.error(t.toasts.pickShoe);
       return;
     }
     if (!Number.isFinite(kmValue) || kmValue === 0) {
-      toast.error("Distance cannot be zero.");
+      toast.error(t.toasts.zeroDistance);
       return;
     }
     startTransition(async () => {
@@ -138,8 +138,13 @@ export function ManualActivityForm({ shoes }: { shoes: ShoeOption[] }) {
         toast.error(result.error);
         return;
       }
-      const shoeName = shoes.find((s) => s.id === Number(shoeId))?.name ?? "shoe";
-      toast.success(`${kmValue > 0 ? "Added" : "Removed"} ${fmtKm(Math.abs(kmValue))} ${kmValue > 0 ? "to" : "from"} ${shoeName}`);
+      const shoeName = shoes.find((s) => s.id === Number(shoeId))?.name ?? "";
+      toast.success(
+        fillStr(kmValue > 0 ? t.toasts.manualAdded : t.toasts.manualRemoved, {
+          km: fmtKm(Math.abs(kmValue)),
+          name: shoeName,
+        })
+      );
       setKm("");
       router.refresh();
     });
@@ -148,7 +153,7 @@ export function ManualActivityForm({ shoes }: { shoes: ShoeOption[] }) {
   return (
     <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
       <div className="space-y-1.5">
-        <Label htmlFor="manual-date">Date</Label>
+        <Label htmlFor="manual-date">{t.settingsPage.date}</Label>
         <Input
           id="manual-date"
           type="date"
@@ -159,7 +164,7 @@ export function ManualActivityForm({ shoes }: { shoes: ShoeOption[] }) {
         />
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="manual-km">Distance (km)</Label>
+        <Label htmlFor="manual-km">{t.settingsPage.distanceKm}</Label>
         <Input
           id="manual-km"
           type="number"
@@ -172,17 +177,17 @@ export function ManualActivityForm({ shoes }: { shoes: ShoeOption[] }) {
         />
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="manual-shoe">Shoe</Label>
+        <Label htmlFor="manual-shoe">{t.settingsPage.shoe}</Label>
         <Select value={shoeId} onValueChange={setShoeId}>
           <SelectTrigger id="manual-shoe" className="w-56">
-            <SelectValue placeholder="Pick a shoe" />
+            <SelectValue placeholder={t.splits.pickShoe} />
           </SelectTrigger>
           <SelectContent>
             {shoes.map((shoe) => (
               <SelectItem key={shoe.id} value={String(shoe.id)}>
                 <span className="truncate">{shoe.name}</span>
                 {shoe.retired ? (
-                  <span className="text-xs text-muted-foreground">· retired</span>
+                  <span className="text-xs text-muted-foreground">· {t.splits.retiredTag}</span>
                 ) : null}
               </SelectItem>
             ))}
@@ -195,7 +200,7 @@ export function ManualActivityForm({ shoes }: { shoes: ShoeOption[] }) {
         ) : (
           <PlusIcon data-icon="inline-start" />
         )}
-        Add entry
+        {t.settingsPage.addEntry}
       </Button>
     </form>
   );

@@ -13,16 +13,15 @@ import { Card, CardContent } from "@/components/ui/card";
 import { RetireButton, ShoeDialog } from "@/components/shoe-dialog";
 import { WearBar, wearStatus } from "@/components/wear-bar";
 import { fmtKm } from "@/lib/format";
+import { fillStr, type Dict } from "@/lib/i18n";
+import { photoSrc } from "@/lib/storage";
 import type { ShoeWithMileage, StravaGear, WearStatus } from "@/lib/types";
 
-const STATUS_META: Record<
-  WearStatus,
-  { label: string; icon: LucideIcon; className: string }
-> = {
-  fresh: { label: "Fresh", icon: SparklesIcon, className: "text-primary" },
-  worn: { label: "Worn", icon: TrendingDownIcon, className: "text-wear-worn" },
-  critical: { label: "Critical", icon: TriangleAlertIcon, className: "text-wear-critical" },
-  retired: { label: "Retired", icon: ArchiveIcon, className: "text-muted-foreground" },
+const STATUS_META: Record<WearStatus, { icon: LucideIcon; className: string }> = {
+  fresh: { icon: SparklesIcon, className: "text-positive" },
+  worn: { icon: TrendingDownIcon, className: "text-wear-worn" },
+  critical: { icon: TriangleAlertIcon, className: "text-wear-critical" },
+  retired: { icon: ArchiveIcon, className: "text-muted-foreground" },
 };
 
 export function ShoeCard({
@@ -30,11 +29,13 @@ export function ShoeCard({
   gearOptions,
   gearName,
   connected,
+  t,
 }: {
   shoe: ShoeWithMileage;
   gearOptions: StravaGear[] | null;
   gearName: string | null;
   connected: boolean;
+  t: Dict;
 }) {
   const status = wearStatus(shoe);
   const meta = STATUS_META[status];
@@ -42,21 +43,23 @@ export function ShoeCard({
   const cap = shoe.retirement_km && shoe.retirement_km > 0 ? shoe.retirement_km : 700;
   const overCap = shoe.current_km - cap;
   const retired = status === "retired";
+  const photo = photoSrc(shoe.photo_path);
 
   return (
     <Card className={cn("pt-0", retired && "opacity-80")}>
       <div
         className={cn(
-          "relative flex h-40 items-center justify-center overflow-hidden border-b bg-gradient-to-br from-accent via-muted to-background",
+          "relative flex h-44 items-center justify-center overflow-hidden border-b",
+          photo ? "bg-white" : "bg-gradient-to-br from-accent via-muted to-background",
           retired && "grayscale"
         )}
       >
-        {shoe.photo_path ? (
+        {photo ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={`/api/uploads/${encodeURIComponent(shoe.photo_path)}`}
+            src={photo}
             alt={shoe.name}
-            className="size-full object-cover"
+            className="size-full object-contain p-4 mix-blend-multiply transition-transform duration-300 group-hover/card:scale-[1.04]"
           />
         ) : (
           <FootprintsIcon className="size-10 text-primary/25" aria-hidden />
@@ -68,7 +71,7 @@ export function ShoeCard({
           )}
         >
           <StatusIcon className="size-3" aria-hidden />
-          {meta.label}
+          {t.wear[status]}
         </span>
       </div>
 
@@ -77,16 +80,12 @@ export function ShoeCard({
           <h3 className="truncate text-[15px] font-medium" title={shoe.name}>
             {shoe.name}
           </h3>
-          <p className="mt-0.5 truncate font-display text-[13px] text-muted-foreground italic">
-            {shoe.role ?? "no role set"}
+          <p className="mt-0.5 truncate text-[13px] text-muted-foreground italic">
+            {shoe.role ?? t.shoesPage.noRole}
           </p>
         </div>
 
-        <WearBar
-          currentKm={shoe.current_km}
-          retirementKm={shoe.retirement_km}
-          status={status}
-        />
+        <WearBar currentKm={shoe.current_km} retirementKm={shoe.retirement_km} status={status} />
 
         <div className="flex items-baseline justify-between gap-2 font-mono text-xs tabular-nums">
           <span>
@@ -94,20 +93,26 @@ export function ShoeCard({
             <span className="text-muted-foreground"> / {Math.round(cap)} km</span>
           </span>
           {overCap > 0 ? (
-            <span className="text-wear-critical">+{fmtKm(overCap, 0)} over</span>
+            <span className="text-wear-critical">
+              {fillStr(t.shoesPage.kmOver, { km: fmtKm(overCap, 0) })}
+            </span>
           ) : (
-            <span className="text-muted-foreground">{fmtKm(cap - shoe.current_km, 0)} left</span>
+            <span className="text-muted-foreground">
+              {fillStr(t.shoesPage.kmLeft, { km: fmtKm(cap - shoe.current_km, 0) })}
+            </span>
           )}
         </div>
 
         {gearName ? (
-          <p className="truncate text-xs text-muted-foreground">Strava gear: {gearName}</p>
+          <p className="truncate text-xs text-muted-foreground">
+            {fillStr(t.shoesPage.gearLabel, { name: gearName })}
+          </p>
         ) : null}
 
         <div className="flex items-center justify-between border-t pt-3">
           <ShoeDialog shoe={shoe} gearOptions={gearOptions} connected={connected}>
             <Button variant="outline" size="sm">
-              <PencilIcon data-icon="inline-start" /> Edit
+              <PencilIcon data-icon="inline-start" /> {t.shoesPage.edit}
             </Button>
           </ShoeDialog>
           <RetireButton shoe={shoe} />

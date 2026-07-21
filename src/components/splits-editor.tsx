@@ -12,7 +12,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useI18n } from "@/components/i18n-provider";
 import { fmtKm, round2 } from "@/lib/format";
+import { fillStr } from "@/lib/i18n";
 import type { ShoeOption } from "@/lib/types";
 
 export interface SplitRow {
@@ -46,6 +48,7 @@ export function SplitsEditor({
   shoes: ShoeOption[];
   firstKmInputRef?: React.Ref<HTMLInputElement>;
 }) {
+  const { t } = useI18n();
   const active = shoes.filter((s) => !s.retired);
   const retired = shoes.filter((s) => s.retired);
   const total = rows.reduce((acc, r) => acc + (parseFloat(r.km) || 0), 0);
@@ -70,9 +73,7 @@ export function SplitsEditor({
     <div className="space-y-2">
       {rows.length === 0 ? (
         <p className="rounded-lg border border-dashed px-3 py-2.5 text-xs text-muted-foreground">
-          {isRun
-            ? "No shoe assigned yet. Add a split below."
-            : "No shoe mileage for this activity. Add a split if it wore a shoe down."}
+          {isRun ? t.splits.emptyRun : t.splits.emptyOther}
         </p>
       ) : null}
 
@@ -88,7 +89,7 @@ export function SplitsEditor({
                 row.shoeId == null && "border-wear-worn text-muted-foreground"
               )}
             >
-              <SelectValue placeholder="Pick a shoe" />
+              <SelectValue placeholder={t.splits.pickShoe} />
             </SelectTrigger>
             <SelectContent>
               {active.map((shoe) => (
@@ -105,7 +106,9 @@ export function SplitsEditor({
                   {retired.map((shoe) => (
                     <SelectItem key={shoe.id} value={String(shoe.id)}>
                       <span className="truncate">{shoe.name}</span>
-                      <span className="text-xs text-muted-foreground">· retired</span>
+                      <span className="text-xs text-muted-foreground">
+                        · {t.splits.retiredTag}
+                      </span>
                     </SelectItem>
                   ))}
                 </>
@@ -122,7 +125,7 @@ export function SplitsEditor({
               min="0"
               value={row.km}
               onChange={(e) => setRow(index, { km: e.target.value })}
-              aria-label="Split distance in kilometers"
+              aria-label={t.splits.kmAria}
               className="w-27 pr-9 text-right font-mono tabular-nums"
             />
             <span className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-xs text-muted-foreground">
@@ -134,7 +137,7 @@ export function SplitsEditor({
             type="button"
             variant="ghost"
             size="icon-sm"
-            aria-label="Remove split"
+            aria-label={t.splits.removeSplit}
             onClick={() => removeRow(index)}
           >
             <XIcon />
@@ -144,21 +147,21 @@ export function SplitsEditor({
 
       <div className="flex min-h-7 items-center justify-between gap-2">
         <Button type="button" variant="ghost" size="sm" onClick={addRow}>
-          <PlusIcon data-icon="inline-start" /> Add split
+          <PlusIcon data-icon="inline-start" /> {t.splits.addSplit}
         </Button>
         {distanceKm > 0 && (isRun || rows.length > 0) ? (
           Math.abs(remaining) <= 0.05 ? (
             <span className="inline-flex items-center gap-1 font-mono text-xs tabular-nums text-positive">
               <CheckIcon className="size-3.5" aria-hidden />
-              all {fmtKm(distanceKm)} assigned
+              {fillStr(t.splits.allAssigned, { km: fmtKm(distanceKm) })}
             </span>
           ) : remaining > 0 ? (
             <span className="font-mono text-xs tabular-nums text-wear-worn">
-              {fmtKm(remaining)} unassigned
+              {fillStr(t.splits.unassigned, { km: fmtKm(remaining) })}
             </span>
           ) : (
             <span className="font-mono text-xs tabular-nums text-wear-critical">
-              {fmtKm(-remaining)} over the distance
+              {fillStr(t.splits.overDistance, { km: fmtKm(-remaining) })}
             </span>
           )
         ) : null}

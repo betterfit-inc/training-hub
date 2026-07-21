@@ -1,29 +1,33 @@
 import type { Metadata } from "next";
-import { Fraunces, Geist, Geist_Mono } from "next/font/google";
+import { Barlow, Barlow_Condensed, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { I18nProvider } from "@/components/i18n-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { Header } from "@/components/header";
 import { countPending } from "@/lib/db";
+import { getLang } from "@/lib/lang";
 import { isStravaConnected, shouldAutoSync, stravaConfigured } from "@/lib/strava";
 
 export const dynamic = "force-dynamic";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const barlow = Barlow({
+  variable: "--font-barlow",
   subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  style: ["normal", "italic"],
+});
+
+const barlowCondensed = Barlow_Condensed({
+  variable: "--font-barlow-condensed",
+  subsets: ["latin"],
+  weight: ["500", "600", "700"],
+  style: ["normal", "italic"],
 });
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
-});
-
-const fraunces = Fraunces({
-  variable: "--font-fraunces",
-  subsets: ["latin"],
-  style: ["normal", "italic"],
-  axes: ["opsz"],
 });
 
 export const metadata: Metadata = {
@@ -34,21 +38,22 @@ export const metadata: Metadata = {
   description: "A private training journal with Strava sync and per-shoe mileage.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const pendingCount = countPending();
-  const connected = isStravaConnected();
+  const lang = await getLang();
+  const pendingCount = await countPending();
+  const connected = await isStravaConnected();
   const configured = stravaConfigured();
-  const autoSync = shouldAutoSync();
+  const autoSync = await shouldAutoSync();
 
   return (
     <html
-      lang="en"
+      lang={lang === "pt" ? "pt-BR" : "en"}
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} h-full antialiased`}
+      className={`${barlow.variable} ${barlowCondensed.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         <ThemeProvider
@@ -57,14 +62,16 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <Header
-            pendingCount={pendingCount}
-            connected={connected}
-            configured={configured}
-            autoSync={autoSync}
-          />
-          <main className="flex-1">{children}</main>
-          <Toaster />
+          <I18nProvider lang={lang}>
+            <Header
+              pendingCount={pendingCount}
+              connected={connected}
+              configured={configured}
+              autoSync={autoSync}
+            />
+            <main className="flex-1">{children}</main>
+            <Toaster />
+          </I18nProvider>
         </ThemeProvider>
       </body>
     </html>

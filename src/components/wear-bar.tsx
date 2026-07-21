@@ -11,7 +11,7 @@ export function wearStatus(shoe: ShoeWithMileage): WearStatus {
 }
 
 const FILL_CLASS: Record<WearStatus, string> = {
-  fresh: "bg-primary",
+  fresh: "bg-positive",
   worn: "bg-wear-worn",
   critical: "bg-wear-critical",
   retired: "bg-muted-foreground/50",

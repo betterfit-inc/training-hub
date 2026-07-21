@@ -8,8 +8,8 @@ The core idea: synced activities land in a review queue. Nothing counts toward s
 
 - Next.js (App Router) with TypeScript, server components and server actions
 - shadcn/ui and Tailwind CSS
-- SQLite through better-sqlite3, plain SQL, no ORM. The database lives at `data/app.db` and is created and migrated automatically on first run
-- Shoe photos are stored in `data/uploads/` and served by a small file route
+- SQLite through libSQL, plain SQL, no ORM. Local development uses the file `data/app.db`; deployments point `TURSO_DATABASE_URL` at a Turso database. Created and migrated automatically on first run either way
+- Shoe photos go to `data/uploads/` locally (served by a small file route) and to Vercel Blob when deployed
 
 ## Setup
 
@@ -63,6 +63,28 @@ Seeding uses the real shoes from the baseline migration and never touches them o
 Shoe mileage is `initial_km` plus the sum of confirmed splits. The baseline migration inserts the shoes with their current corrected mileage as `initial_km`, and records the migration date as `baseline_date`. Synced activities that started before that date are stored as confirmed history with no splits: they appear in the log but add no shoe mileage, because the baselines already include them. Only newer activities go through the review queue.
 
 To correct mileage later, use the manual adjustment tool in Settings. It creates a manual confirmed activity for a date, distance and shoe; negative distances subtract.
+
+## Deploying to Vercel
+
+Vercel's filesystem is ephemeral, so the deployed app stores data in Turso (a hosted libSQL/SQLite service) and photos in Vercel Blob. Locally nothing changes: with no `TURSO_DATABASE_URL` set, the app keeps using `data/app.db`.
+
+1. Create the database on Turso and import your local data in one step:
+
+   ```bash
+   brew install tursodatabase/tap/turso
+   turso auth signup
+   turso db create training-hub --from-file data/app.db
+   turso db show training-hub --url        # -> TURSO_DATABASE_URL
+   turso db tokens create training-hub     # -> TURSO_AUTH_TOKEN
+   ```
+
+2. In the Vercel project, add the environment variables: `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET`, `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`.
+
+3. In the Vercel project's Storage tab, create a Blob store and connect it. That injects `BLOB_READ_WRITE_TOKEN` automatically. Shoe photos uploaded locally are files on your machine, so re-upload them once through each shoe's Edit dialog on the deployed app.
+
+4. In your Strava API application settings, set the Authorization Callback Domain to the deployed domain (for example `training-hub-psi-one.vercel.app`). Strava allows a single callback domain, so switch it back to `localhost` when you want to reconnect locally, or use a second Strava API app for local development.
+
+5. Redeploy. To keep the app private, enable Deployment Protection in the Vercel project settings.
 
 ## Notes
 

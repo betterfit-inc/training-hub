@@ -20,74 +20,66 @@ import {
   ManualActivityForm,
 } from "@/components/settings-forms";
 import { getMeta, listShoes } from "@/lib/db";
+import { getDict } from "@/lib/lang";
 import { isStravaConnected, stravaConfigured, tryFetchGear } from "@/lib/strava";
 import { fmtDate, fmtDateLong, fmtTime } from "@/lib/format";
+import { fillStr } from "@/lib/i18n";
 
 export const metadata = { title: "Settings" };
 
-const CALLBACK_ERRORS: Record<string, string> = {
-  denied: "Strava authorization was cancelled.",
-  state: "The authorization state did not match. Try connecting again.",
-  exchange: "Exchanging the authorization code failed. Check your API keys and try again.",
-  missing_env: "Set STRAVA_CLIENT_ID and STRAVA_CLIENT_SECRET before connecting.",
-};
-
 export default async function SettingsPage({ searchParams }: PageProps<"/settings">) {
   const params = await searchParams;
+  const { lang, t } = await getDict();
   const configured = stravaConfigured();
-  const connected = isStravaConnected();
-  const athleteName = getMeta("athlete_name");
-  const lastSync = getMeta("last_sync_at");
-  const baselineDate = getMeta("baseline_date");
+  const connected = await isStravaConnected();
+  const athleteName = await getMeta("athlete_name");
+  const lastSync = await getMeta("last_sync_at");
+  const baselineDate = await getMeta("baseline_date");
   const gear = connected ? await tryFetchGear() : null;
-  const shoes = listShoes();
+  const shoes = await listShoes();
 
   const justConnected = params.connected === "1";
   const errorKey = typeof params.error === "string" ? params.error : null;
-  const errorMessage = errorKey ? CALLBACK_ERRORS[errorKey] ?? "Something went wrong." : null;
+  const errorMessage = errorKey
+    ? t.settingsPage.errors[errorKey] ?? t.errors.generic
+    : null;
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
-      <h1 className="font-display text-3xl font-semibold tracking-tight">Settings</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Strava connection, gear matching and manual corrections.
-      </p>
+      <h1 className="font-display text-4xl font-bold uppercase">{t.settingsPage.title}</h1>
+      <p className="mt-1 text-sm text-muted-foreground">{t.settingsPage.subtitle}</p>
 
       <div className="mt-6 space-y-6">
         {justConnected ? (
           <Alert className="border-emerald-500/30 text-emerald-700 dark:text-emerald-300">
             <CheckCircle2Icon />
-            <AlertTitle>Strava connected</AlertTitle>
-            <AlertDescription>
-              Press Sync to pull your activities, then link each shoe to its Strava gear below.
-            </AlertDescription>
+            <AlertTitle>{t.settingsPage.connectedAlert}</AlertTitle>
+            <AlertDescription>{t.settingsPage.connectedAlertBody}</AlertDescription>
           </Alert>
         ) : null}
         {errorMessage ? (
           <Alert variant="destructive">
             <CircleAlertIcon />
-            <AlertTitle>Connection failed</AlertTitle>
+            <AlertTitle>{t.settingsPage.failedAlert}</AlertTitle>
             <AlertDescription>{errorMessage}</AlertDescription>
           </Alert>
         ) : null}
 
         <Card>
           <CardHeader>
-            <CardTitle>Strava</CardTitle>
-            <CardDescription>
-              Read only. Training Hub never writes anything to Strava.
-            </CardDescription>
+            <CardTitle>{t.settingsPage.strava}</CardTitle>
+            <CardDescription>{t.settingsPage.stravaBody}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {!configured ? (
               <div className="space-y-3 text-sm">
                 <p className="flex items-center gap-2 font-medium">
                   <KeyRoundIcon className="size-4 text-wear-worn" aria-hidden />
-                  API keys missing
+                  {t.settingsPage.keysMissing}
                 </p>
                 <ol className="list-decimal space-y-1.5 pl-5 text-muted-foreground">
                   <li>
-                    Create an API application at{" "}
+                    {t.settingsPage.step1a}{" "}
                     <a
                       href="https://www.strava.com/settings/api"
                       target="_blank"
@@ -96,13 +88,23 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
                     >
                       strava.com/settings/api
                     </a>{" "}
-                    with Authorization Callback Domain set to <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">localhost</code>
+                    {t.settingsPage.step1b}{" "}
+                    <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
+                      localhost
+                    </code>
                   </li>
                   <li>
-                    Copy <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">.env.example</code> to{" "}
-                    <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">.env.local</code> and fill in the Client ID and Client Secret
+                    {t.settingsPage.step2a}{" "}
+                    <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
+                      .env.example
+                    </code>{" "}
+                    {t.settingsPage.step2b}{" "}
+                    <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
+                      .env.local
+                    </code>{" "}
+                    {t.settingsPage.step2c}
                   </li>
-                  <li>Restart the dev server and come back here to connect</li>
+                  <li>{t.settingsPage.step3}</li>
                 </ol>
               </div>
             ) : connected ? (
@@ -110,12 +112,17 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
                 <div className="text-sm">
                   <p className="flex items-center gap-2 font-medium">
                     <span aria-hidden className="size-2 rounded-full bg-positive" />
-                    Connected{athleteName ? ` as ${athleteName}` : ""}
+                    {fillStr(t.settingsPage.connectedAs, {
+                      name: athleteName ? ` · ${athleteName}` : "",
+                    })}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {lastSync
-                      ? `Last sync ${fmtDate(lastSync)} at ${fmtTime(lastSync)}. Syncs run automatically when the app loads after more than an hour.`
-                      : "Never synced. Press Sync to pull your activities."}
+                      ? fillStr(t.settingsPage.lastSync, {
+                          date: fmtDate(lastSync, lang),
+                          time: fmtTime(lastSync),
+                        })
+                      : t.settingsPage.neverSynced}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -128,15 +135,15 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
                 <div className="text-sm">
                   <p className="flex items-center gap-2 font-medium">
                     <span aria-hidden className="size-2 rounded-full bg-muted-foreground/40" />
-                    Not connected
+                    {t.settingsPage.notConnected}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Authorize with the activity:read_all scope to sync your training history.
+                    {t.settingsPage.notConnectedBody}
                   </p>
                 </div>
                 <Button asChild>
                   <a href="/api/strava/connect">
-                    <CableIcon data-icon="inline-start" /> Connect Strava
+                    <CableIcon data-icon="inline-start" /> {t.settingsPage.connect}
                   </a>
                 </Button>
               </div>
@@ -144,9 +151,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
 
             {baselineDate ? (
               <p className="border-t pt-3 text-xs text-muted-foreground">
-                Shoe baselines were set on {fmtDateLong(baselineDate)}. Synced activities from
-                before that date show up in the log as history but add no shoe mileage, because
-                the baselines already include them.
+                {fillStr(t.settingsPage.baselineNote, { date: fmtDateLong(baselineDate, lang) })}
               </p>
             ) : null}
           </CardContent>
@@ -155,11 +160,8 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
         {connected ? (
           <Card>
             <CardHeader>
-              <CardTitle>Gear matching</CardTitle>
-              <CardDescription>
-                Link each shoe to its Strava gear so synced activities pick the right shoe
-                automatically.
-              </CardDescription>
+              <CardTitle>{t.settingsPage.gearMatching}</CardTitle>
+              <CardDescription>{t.settingsPage.gearMatchingBody}</CardDescription>
             </CardHeader>
             <CardContent>
               {gear && gear.length > 0 ? (
@@ -175,9 +177,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
                 />
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  {gear === null
-                    ? "Could not load your gear list from Strava right now. Try again later."
-                    : "No shoes found on your Strava profile."}
+                  {gear === null ? t.settingsPage.gearLoadFailed : t.settingsPage.noStravaShoes}
                 </p>
               )}
             </CardContent>
@@ -186,11 +186,8 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
 
         <Card>
           <CardHeader>
-            <CardTitle>Manual adjustment</CardTitle>
-            <CardDescription>
-              Backfill or correct shoe mileage with a manual confirmed entry. Use a negative
-              distance to subtract kilometers.
-            </CardDescription>
+            <CardTitle>{t.settingsPage.manual}</CardTitle>
+            <CardDescription>{t.settingsPage.manualBody}</CardDescription>
           </CardHeader>
           <CardContent>
             {shoes.length > 0 ? (
@@ -203,7 +200,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
                 }))}
               />
             ) : (
-              <p className="text-sm text-muted-foreground">Add a shoe first.</p>
+              <p className="text-sm text-muted-foreground">{t.settingsPage.addShoeFirst}</p>
             )}
           </CardContent>
         </Card>

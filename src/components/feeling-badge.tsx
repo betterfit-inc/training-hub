@@ -4,9 +4,11 @@ import type { Feeling } from "@/lib/types";
 
 export function FeelingBadge({
   feeling,
+  label,
   className,
 }: {
   feeling: Feeling;
+  label: string;
   className?: string;
 }) {
   const meta = feelingMeta(feeling);
@@ -20,7 +22,7 @@ export function FeelingBadge({
       )}
     >
       <span aria-hidden>{meta.emoji}</span>
-      {meta.label}
+      {label}
     </span>
   );
 }

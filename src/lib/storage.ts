@@ -19,8 +19,9 @@ export function blobEnabled(): boolean {
 }
 
 /**
- * Stores a shoe photo and returns the value to keep in shoes.photo_path:
- * a full URL when stored in Vercel Blob, or a bare filename for local disk.
+ * Stores a shoe photo and returns the filename to keep in shoes.photo_path.
+ * With a Blob token the file goes to the (private) Vercel Blob store, else to
+ * data/uploads/. Either way the uploads route serves it by that filename.
  */
 export async function storePhoto(file: File): Promise<string> {
   const ext = PHOTO_TYPES[file.type];
@@ -29,8 +30,8 @@ export async function storePhoto(file: File): Promise<string> {
   const name = `shoe-${Date.now()}-${crypto.randomBytes(4).toString("hex")}.${ext}`;
 
   if (blobEnabled()) {
-    const blob = await put(name, file, { access: "public" });
-    return blob.url;
+    const blob = await put(name, file, { access: "private", contentType: file.type });
+    return blob.pathname;
   }
 
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -38,14 +39,9 @@ export async function storePhoto(file: File): Promise<string> {
   return name;
 }
 
-/**
- * Resolves a stored photo_path to an <img> src. Bare filenames are served by
- * the local uploads route; they are unreachable on Vercel, so the card falls
- * back to the placeholder until the photo is re-uploaded there.
- */
+/** Resolves a stored photo_path to an <img> src served by the uploads route. */
 export function photoSrc(photoPath: string | null): string | null {
   if (!photoPath) return null;
   if (photoPath.startsWith("http")) return photoPath;
-  if (blobEnabled()) return null;
   return `/api/uploads/${encodeURIComponent(photoPath)}`;
 }

@@ -8,6 +8,11 @@ import { SportIcon } from "@/components/sport-icon";
 import { getActivity, listShoes } from "@/lib/db";
 import { getDict } from "@/lib/lang";
 import {
+  ensureActivityDetail,
+  type StravaLap,
+  type StravaSplit,
+} from "@/lib/strava";
+import {
   fmtDateLong,
   fmtDuration,
   fmtElev,
@@ -16,6 +21,7 @@ import {
   fmtPace,
   fmtTime,
 } from "@/lib/format";
+import type { Dict } from "@/lib/i18n";
 import { isRunSport } from "@/lib/validate";
 import type { ShoeOption } from "@/lib/types";
 
@@ -32,6 +38,119 @@ function Stat({ label, value }: { label: string; value: string }) {
         {label}
       </dt>
       <dd className="mt-0.5 font-display text-2xl font-semibold">{value}</dd>
+    </div>
+  );
+}
+
+function paceOf(distanceM?: number, movingS?: number): number | null {
+  if (!distanceM || !movingS || distanceM <= 0) return null;
+  return movingS / (distanceM / 1000);
+}
+
+function fmtLapDist(distanceM?: number): string {
+  if (!distanceM || distanceM <= 0) return "–";
+  if (distanceM < 950) return `${Math.round(distanceM)} m`;
+  return fmtKm(distanceM / 1000, distanceM < 99500 ? 2 : 1);
+}
+
+const TH = "px-2 py-1.5 text-left text-[11px] font-medium tracking-wider text-muted-foreground uppercase";
+const TD = "px-2 py-1.5 font-mono text-sm tabular-nums whitespace-nowrap";
+
+function LapsTable({ laps, t }: { laps: StravaLap[]; t: Dict }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full">
+        <thead>
+          <tr className="border-b">
+            <th className={TH}>{t.detail.lap}</th>
+            <th className={TH}>{t.review.distance}</th>
+            <th className={TH}>{t.review.time}</th>
+            <th className={TH}>{t.review.pace}</th>
+            <th className={TH}>{t.detail.hr}</th>
+            <th className={TH}>{t.detail.maxShort}</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border/50">
+          {laps.map((lap, index) => {
+            const pace = lap.average_speed
+              ? 1000 / lap.average_speed
+              : paceOf(lap.distance, lap.moving_time);
+            return (
+              <tr key={index}>
+                <td className={`${TD} text-muted-foreground`}>{lap.lap_index ?? index + 1}</td>
+                <td className={TD}>{fmtLapDist(lap.distance)}</td>
+                <td className={TD}>{fmtDuration(lap.moving_time)}</td>
+                <td className={`${TD} font-medium`}>{pace ? fmtPace(pace) : "–"}</td>
+                <td className={`${TD} text-muted-foreground`}>
+                  {lap.average_heartrate ? Math.round(lap.average_heartrate) : "–"}
+                </td>
+                <td className={`${TD} text-muted-foreground`}>
+                  {lap.max_heartrate ? Math.round(lap.max_heartrate) : "–"}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function KmSplitsTable({ splits, t }: { splits: StravaSplit[]; t: Dict }) {
+  const paces = splits
+    .map((s) => (s.average_speed ? 1000 / s.average_speed : paceOf(s.distance, s.moving_time)))
+    .map((p) => p ?? Number.POSITIVE_INFINITY);
+  const fastest = Math.min(...paces.filter((p) => Number.isFinite(p)));
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full">
+        <thead>
+          <tr className="border-b">
+            <th className={TH}>km</th>
+            <th className={TH}>{t.review.pace}</th>
+            <th className={`${TH} w-full`} aria-hidden></th>
+            <th className={TH}>{t.detail.hr}</th>
+            <th className={TH}>{t.detail.elev}</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border/50">
+          {splits.map((split, index) => {
+            const pace = paces[index];
+            const partial = (split.distance ?? 1000) < 950;
+            const width =
+              Number.isFinite(pace) && Number.isFinite(fastest) && pace > 0
+                ? Math.max(8, Math.round((fastest / pace) * 100))
+                : 0;
+            return (
+              <tr key={index}>
+                <td className={`${TD} text-muted-foreground`}>
+                  {partial ? ((split.distance ?? 0) / 1000).toFixed(1) : split.split ?? index + 1}
+                </td>
+                <td className={`${TD} font-medium`}>
+                  {Number.isFinite(pace) ? fmtPace(pace) : "–"}
+                </td>
+                <td className="w-full min-w-28 px-2 py-1.5">
+                  <div className="h-1.5 rounded-full bg-muted">
+                    <div
+                      className="h-full rounded-full bg-primary/80"
+                      style={{ width: `${width}%` }}
+                    />
+                  </div>
+                </td>
+                <td className={`${TD} text-muted-foreground`}>
+                  {split.average_heartrate ? Math.round(split.average_heartrate) : "–"}
+                </td>
+                <td className={`${TD} text-muted-foreground`}>
+                  {split.elevation_difference != null
+                    ? `${split.elevation_difference > 0 ? "+" : ""}${Math.round(split.elevation_difference)} m`
+                    : "–"}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -55,12 +174,27 @@ export default async function ActivityPage({ params }: PageProps<"/activity/[id]
   const run = isRunSport(activity.sport_type);
   const confirmed = activity.status === "confirmed";
 
+  const detail = await ensureActivityDetail(activity);
+  const laps = (detail?.laps ?? []).filter(
+    (lap) => (lap.distance ?? 0) > 0 || (lap.moving_time ?? 0) > 0
+  );
+  const kmSplits = (detail?.splits_metric ?? []).filter((s) => (s.distance ?? 0) > 0);
+  // Devices auto-lap every km; only show laps when they carry real structure.
+  const structuredLaps =
+    laps.length > 1 && laps.some((lap) => Math.abs((lap.distance ?? 0) - 1000) > 150);
+  const description = detail?.description?.trim();
+
   let rawPretty: string | null = null;
-  if (activity.raw_json) {
+  const rawSource = detail ?? (activity.raw_json ? activity.raw_json : null);
+  if (rawSource) {
     try {
-      rawPretty = JSON.stringify(JSON.parse(activity.raw_json), null, 2);
+      rawPretty = JSON.stringify(
+        typeof rawSource === "string" ? JSON.parse(rawSource) : rawSource,
+        null,
+        2
+      );
     } catch {
-      rawPretty = activity.raw_json;
+      rawPretty = typeof rawSource === "string" ? rawSource : null;
     }
   }
 
@@ -104,6 +238,12 @@ export default async function ActivityPage({ params }: PageProps<"/activity/[id]
         </div>
       </header>
 
+      {description ? (
+        <p className="mt-3 text-sm leading-relaxed text-muted-foreground italic">
+          {description}
+        </p>
+      ) : null}
+
       <dl className="mt-6 grid grid-cols-3 gap-x-4 gap-y-4 rounded-xl border bg-card p-4 sm:grid-cols-5">
         <Stat
           label={t.review.distance}
@@ -113,7 +253,35 @@ export default async function ActivityPage({ params }: PageProps<"/activity/[id]
         <Stat label={t.review.time} value={fmtDuration(activity.moving_time_s)} />
         <Stat label={t.review.heartRate} value={fmtHr(activity.avg_hr)} />
         <Stat label={t.review.elevation} value={fmtElev(activity.elevation_gain_m)} />
+        {detail?.max_heartrate ? (
+          <Stat label={t.detail.maxHr} value={fmtHr(detail.max_heartrate)} />
+        ) : null}
+        {detail?.calories ? (
+          <Stat label={t.detail.calories} value={`${Math.round(detail.calories)} kcal`} />
+        ) : null}
       </dl>
+
+      {structuredLaps ? (
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle>{t.detail.laps}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <LapsTable laps={laps} t={t} />
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {kmSplits.length > 1 ? (
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle>{t.detail.kmSplits}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <KmSplitsTable splits={kmSplits} t={t} />
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card className="mt-6">
         <CardHeader>

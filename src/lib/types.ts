@@ -37,6 +37,8 @@ export interface Activity {
   workout_notes: string | null;
   health_notes: string | null;
   raw_json: string | null;
+  detail_json: string | null;
+  detail_synced_at: string | null;
   created_at: string;
 }
 

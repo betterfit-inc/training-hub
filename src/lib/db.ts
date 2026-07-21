@@ -107,6 +107,16 @@ async function migrate(): Promise<void> {
   // Migration 001: schema.
   await client.batch(SCHEMA, "write");
 
+  // Migration 003: per-activity detail cache (laps, km splits) from Strava.
+  const columns = await client.execute("SELECT name FROM pragma_table_info('activities')");
+  const names = new Set(columns.rows.map((row) => String(row.name)));
+  if (!names.has("detail_json")) {
+    await client.execute("ALTER TABLE activities ADD COLUMN detail_json TEXT");
+  }
+  if (!names.has("detail_synced_at")) {
+    await client.execute("ALTER TABLE activities ADD COLUMN detail_synced_at TEXT");
+  }
+
   // Migration 002: baseline shoes + baseline date, only on an empty database.
   // The write transaction serializes concurrent cold starts.
   const tx = await client.transaction("write");
@@ -439,6 +449,14 @@ export async function confirmActivity(
       sql: INSERT_SPLIT_SQL,
       args: [id, split.shoe_id, split.km],
     })),
+  ]);
+}
+
+export async function saveActivityDetail(id: number, detailJson: string): Promise<void> {
+  await exec("UPDATE activities SET detail_json = ?, detail_synced_at = ? WHERE id = ?", [
+    detailJson,
+    new Date().toISOString(),
+    id,
   ]);
 }
 

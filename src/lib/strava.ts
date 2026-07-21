@@ -6,9 +6,11 @@ import {
   getStravaAuth,
   insertSyncedActivity,
   latestSyncedStartEpoch,
+  saveActivityDetail,
   saveStravaAuth,
   setMeta,
 } from "./db";
+import type { Activity } from "./types";
 import { round2 } from "./format";
 import { isRunSport } from "./validate";
 import type { SplitInput, StravaGear } from "./types";
@@ -144,6 +146,73 @@ export async function tryFetchGear(): Promise<StravaGear[] | null> {
   if (!stravaConfigured() || !(await isStravaConnected())) return null;
   try {
     return await fetchAthleteGear();
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Activity detail (laps + km splits), fetched lazily and cached forever
+// ---------------------------------------------------------------------------
+
+export interface StravaLap {
+  lap_index?: number;
+  name?: string;
+  distance?: number;
+  moving_time?: number;
+  elapsed_time?: number;
+  average_speed?: number;
+  average_heartrate?: number;
+  max_heartrate?: number;
+  total_elevation_gain?: number;
+}
+
+export interface StravaSplit {
+  split?: number;
+  distance?: number;
+  moving_time?: number;
+  elapsed_time?: number;
+  average_speed?: number;
+  average_heartrate?: number;
+  elevation_difference?: number;
+}
+
+export interface StravaActivityDetail {
+  id?: number;
+  description?: string | null;
+  calories?: number;
+  device_name?: string;
+  max_heartrate?: number;
+  laps?: StravaLap[];
+  splits_metric?: StravaSplit[];
+}
+
+export function parseActivityDetail(json: string | null): StravaActivityDetail | null {
+  if (!json) return null;
+  try {
+    const parsed = JSON.parse(json) as StravaActivityDetail;
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Returns the cached Strava detail for an activity, fetching and caching it on
+ * first view. One API call per activity ever, so the read rate limit is never
+ * an issue. Returns null for manual activities, when disconnected, or when the
+ * fetch fails (the page then simply omits the detail sections).
+ */
+export async function ensureActivityDetail(
+  activity: Pick<Activity, "id" | "strava_id" | "detail_json">
+): Promise<StravaActivityDetail | null> {
+  if (activity.detail_json) return parseActivityDetail(activity.detail_json);
+  if (!activity.strava_id) return null;
+  if (!stravaConfigured() || !(await isStravaConnected())) return null;
+  try {
+    const detail = await apiGet<StravaActivityDetail>(`/activities/${activity.strava_id}`);
+    await saveActivityDetail(activity.id, JSON.stringify(detail));
+    return detail;
   } catch {
     return null;
   }

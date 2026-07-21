@@ -39,6 +39,7 @@ export async function GET(
     });
   }
 
+  let reason = "blob-disabled";
   if (blobEnabled()) {
     try {
       const result = await get(safeName, { access: "private" });
@@ -50,10 +51,12 @@ export async function GET(
           },
         });
       }
-    } catch {
-      // fall through to 404
+      reason = "blob-miss";
+    } catch (error) {
+      reason = "blob-error";
+      console.error("uploads route blob error:", error);
     }
   }
 
-  return new Response("Not found", { status: 404 });
+  return new Response("Not found", { status: 404, headers: { "x-uploads": reason } });
 }

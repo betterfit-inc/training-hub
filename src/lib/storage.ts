@@ -13,9 +13,13 @@ const PHOTO_TYPES: Record<string, string> = {
 };
 const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 
-/** Vercel Blob is used when its token is present; otherwise photos stay on disk. */
+/**
+ * Vercel Blob is used when its credentials are present; otherwise photos stay
+ * on disk. Locally that is BLOB_READ_WRITE_TOKEN; on Vercel a dashboard-connected
+ * store may inject only BLOB_STORE_ID and authenticate through the OIDC token.
+ */
 export function blobEnabled(): boolean {
-  return !!process.env.BLOB_READ_WRITE_TOKEN;
+  return !!(process.env.BLOB_READ_WRITE_TOKEN || process.env.BLOB_STORE_ID);
 }
 
 /**

@@ -1,0 +1,282 @@
+/**
+ * Seed script: inserts fake activities in mixed statuses so the UI can be
+ * evaluated without a Strava connection. Uses the real shoes created by
+ * migration 002 and never touches them or their baselines.
+ *
+ *   npm run seed        insert (re-runs replace previous seed data)
+ *   npm run seed:clear  remove only seeded activities
+ */
+import { db } from "../src/lib/db";
+import type { Feeling } from "../src/lib/types";
+
+const SEED_MARKER = '{"seed":true}';
+
+function clearSeeds(): number {
+  const info = db
+    .prepare("DELETE FROM activities WHERE json_extract(raw_json, '$.seed') = 1")
+    .run();
+  return info.changes;
+}
+
+if (process.argv.includes("--clear")) {
+  const removed = clearSeeds();
+  console.log(`Removed ${removed} seeded activities. Shoes and baselines untouched.`);
+  process.exit(0);
+}
+
+const shoeRows = db.prepare("SELECT id, name FROM shoes").all() as Array<{
+  id: number;
+  name: string;
+}>;
+const shoeId = (name: string): number => {
+  const row = shoeRows.find((s) => s.name === name);
+  if (!row) throw new Error(`Shoe not found: ${name}. Run the app once to migrate.`);
+  return row.id;
+};
+
+const EVO_BRANCO = shoeId("Adidas Evo SL Preto e Branco");
+const EVO_CINZA = shoeId("Adidas Evo SL Preto e Cinza");
+const SUPERBLAST = shoeId("ASICS Superblast 3");
+const ADIOS = shoeId("Adidas Adios Pro 4");
+const DRIVE = shoeId("Adidas Drive RC");
+const SALOMON = shoeId("Salomon S/Lab Ultra 3 V2");
+
+function startedAt(daysAgo: number, hour: number, minute = 12): string {
+  const d = new Date();
+  d.setDate(d.getDate() - daysAgo);
+  d.setHours(hour, minute, 0, 0);
+  return d.toISOString();
+}
+
+interface SeedActivity {
+  name: string;
+  sport: string;
+  daysAgo: number;
+  hour: number;
+  km: number;
+  movingS: number;
+  hr: number | null;
+  elev: number | null;
+  status: "pending_review" | "confirmed";
+  splits: Array<{ shoe: number | null; km: number }>;
+  rpe?: number;
+  feeling?: Feeling;
+  workout?: string;
+  health?: string;
+}
+
+const ACTIVITIES: SeedActivity[] = [
+  // Pending review: what the queue looks like after a sync.
+  {
+    name: "Morning Easy Run",
+    sport: "Run",
+    daysAgo: 0,
+    hour: 7,
+    km: 12.21,
+    movingS: 3745,
+    hr: 148,
+    elev: 62,
+    status: "pending_review",
+    splits: [{ shoe: EVO_BRANCO, km: 12.21 }],
+  },
+  {
+    name: "Track 6x800 @ 3K effort",
+    sport: "Run",
+    daysAgo: 1,
+    hour: 18,
+    km: 10.44,
+    movingS: 2860,
+    hr: 164,
+    elev: 8,
+    status: "pending_review",
+    splits: [{ shoe: null, km: 10.44 }], // no gear matched on Strava
+  },
+  {
+    name: "Evening Spin",
+    sport: "Ride",
+    daysAgo: 2,
+    hour: 17,
+    km: 24.5,
+    movingS: 3480,
+    hr: 132,
+    elev: 210,
+    status: "pending_review",
+    splits: [],
+  },
+
+  // Confirmed history across three weeks.
+  {
+    name: "Long Run 28k with 10k @ MP",
+    sport: "Run",
+    daysAgo: 3,
+    hour: 6,
+    km: 28.06,
+    movingS: 8630,
+    hr: 152,
+    elev: 240,
+    status: "confirmed",
+    splits: [
+      { shoe: SUPERBLAST, km: 18.06 },
+      { shoe: ADIOS, km: 10 },
+    ],
+    rpe: 8,
+    feeling: "good",
+    workout:
+      "Negative split. Swapped shoes before the MP block, 10k at 4:15 felt controlled. Gel every 35 minutes worked.",
+    health: "Left calf tight afterwards, foam rolled in the evening.",
+  },
+  {
+    name: "Recovery Jog",
+    sport: "Run",
+    daysAgo: 4,
+    hour: 7,
+    km: 6.02,
+    movingS: 2230,
+    hr: 128,
+    elev: 20,
+    status: "confirmed",
+    splits: [{ shoe: SUPERBLAST, km: 6.02 }],
+    rpe: 2,
+    feeling: "ok",
+    workout: "Legs heavy from the long run, kept it truly easy.",
+    health: "Slept six hours, need more.",
+  },
+  {
+    name: "Easy + 6 Strides",
+    sport: "Run",
+    daysAgo: 6,
+    hour: 7,
+    km: 10.12,
+    movingS: 3208,
+    hr: 141,
+    elev: 55,
+    status: "confirmed",
+    splits: [{ shoe: EVO_CINZA, km: 10.12 }],
+    rpe: 3,
+    feeling: "good",
+    workout: "Strides on the grass at the end, felt springy.",
+  },
+  {
+    name: "Threshold 3x10min",
+    sport: "Run",
+    daysAgo: 8,
+    hour: 18,
+    km: 13.3,
+    movingS: 3617,
+    hr: 158,
+    elev: 30,
+    status: "confirmed",
+    splits: [{ shoe: DRIVE, km: 13.3 }],
+    rpe: 7,
+    feeling: "great",
+    workout: "3x10 minutes at 4:05 with 2 minute floats. Last rep was the best one.",
+  },
+  {
+    name: "Trail Adventure Serra",
+    sport: "TrailRun",
+    daysAgo: 9,
+    hour: 8,
+    km: 16.8,
+    movingS: 7020,
+    hr: 149,
+    elev: 890,
+    status: "confirmed",
+    splits: [{ shoe: SALOMON, km: 16.8 }],
+    rpe: 6,
+    feeling: "great",
+    workout: "Technical descents, hiked the steep climbs. Views paid for everything.",    health: "Rolled the right ankle slightly on a rock, fine after a minute.",
+  },
+  {
+    name: "Easy Run",
+    sport: "Run",
+    daysAgo: 11,
+    hour: 7,
+    km: 8.15,
+    movingS: 2510,
+    hr: 138,
+    elev: 40,
+    status: "confirmed",
+    splits: [{ shoe: EVO_BRANCO, km: 8.15 }],
+    rpe: 3,
+    feeling: "ok",
+  },
+  {
+    name: "Gym Strength",
+    sport: "WeightTraining",
+    daysAgo: 13,
+    hour: 19,
+    km: 0,
+    movingS: 3600,
+    hr: 118,
+    elev: null,
+    status: "confirmed",
+    splits: [],
+    rpe: 5,
+    feeling: "good",
+    health: "Hips feeling stronger week over week.",
+  },
+  {
+    name: "Sunday Long Easy",
+    sport: "Run",
+    daysAgo: 16,
+    hour: 7,
+    km: 22.3,
+    movingS: 7024,
+    hr: 145,
+    elev: 180,
+    status: "confirmed",
+    splits: [{ shoe: SUPERBLAST, km: 22.3 }],
+    rpe: 5,
+    feeling: "rough",
+    workout: "Bonked at 18k, clearly underfueled. Shuffled home.",
+    health: "Stomach was off in the morning, should not have skipped breakfast.",
+  },
+];
+
+const replaced = clearSeeds();
+
+const insertActivity = db.prepare(`
+  INSERT INTO activities
+    (strava_id, name, sport_type, started_at, distance_km, moving_time_s,
+     avg_pace_s_per_km, avg_hr, elevation_gain_m, status, rpe, feeling,
+     workout_notes, health_notes, raw_json)
+  VALUES
+    (NULL, @name, @sport, @started_at, @km, @movingS, @pace, @hr, @elev,
+     @status, @rpe, @feeling, @workout, @health, @raw)
+`);
+const insertSplit = db.prepare(
+  "INSERT INTO activity_splits (activity_id, shoe_id, km) VALUES (?, ?, ?)"
+);
+
+const seedAll = db.transaction(() => {
+  for (const a of ACTIVITIES) {
+    const info = insertActivity.run({
+      name: a.name,
+      sport: a.sport,
+      started_at: startedAt(a.daysAgo, a.hour),
+      km: a.km,
+      movingS: a.movingS,
+      pace: a.km > 0 ? Math.round(a.movingS / a.km) : null,
+      hr: a.hr,
+      elev: a.elev,
+      status: a.status,
+      rpe: a.rpe ?? null,
+      feeling: a.feeling ?? null,
+      workout: a.workout ?? null,
+      health: a.health ?? null,
+      raw: SEED_MARKER,
+    });
+    for (const split of a.splits) {
+      insertSplit.run(Number(info.lastInsertRowid), split.shoe, split.km);
+    }
+  }
+});
+seedAll();
+
+const pending = ACTIVITIES.filter((a) => a.status === "pending_review").length;
+console.log(
+  `Seeded ${ACTIVITIES.length} activities (${pending} pending review, ${
+    ACTIVITIES.length - pending
+  } confirmed)${replaced > 0 ? `, replacing ${replaced} previous seeds` : ""}.`
+);
+console.log("Remove them any time with: npm run seed:clear");

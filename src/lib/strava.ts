@@ -1,0 +1,254 @@
+import {
+  activityExistsByStravaId,
+  countPending,
+  findShoeIdByGear,
+  getMeta,
+  getStravaAuth,
+  insertSyncedActivity,
+  latestSyncedStartEpoch,
+  saveStravaAuth,
+  setMeta,
+} from "./db";
+import { round2 } from "./format";
+import { isRunSport } from "./validate";
+import type { SplitInput, StravaGear } from "./types";
+
+const TOKEN_URL = "https://www.strava.com/oauth/token";
+const AUTHORIZE_URL = "https://www.strava.com/oauth/authorize";
+const API_BASE = "https://www.strava.com/api/v3";
+
+export function stravaConfigured(): boolean {
+  return !!(process.env.STRAVA_CLIENT_ID && process.env.STRAVA_CLIENT_SECRET);
+}
+
+export function isStravaConnected(): boolean {
+  return getStravaAuth() !== null;
+}
+
+/** True when connected and the last sync is more than an hour old (or never ran). */
+export function shouldAutoSync(): boolean {
+  if (!stravaConfigured() || !isStravaConnected()) return false;
+  const lastSync = getMeta("last_sync_at");
+  return !lastSync || Date.now() - Date.parse(lastSync) > 60 * 60 * 1000;
+}
+
+export function buildAuthorizeUrl(origin: string, state: string): string {
+  const url = new URL(AUTHORIZE_URL);
+  url.searchParams.set("client_id", process.env.STRAVA_CLIENT_ID ?? "");
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("redirect_uri", `${origin}/api/strava/callback`);
+  url.searchParams.set("approval_prompt", "auto");
+  url.searchParams.set("scope", "activity:read_all");
+  url.searchParams.set("state", state);
+  return url.toString();
+}
+
+interface TokenResponse {
+  access_token: string;
+  refresh_token: string;
+  expires_at: number;
+  athlete?: { id: number; firstname?: string; lastname?: string };
+}
+
+async function requestToken(params: Record<string, string>): Promise<TokenResponse> {
+  const body = new URLSearchParams({
+    client_id: process.env.STRAVA_CLIENT_ID ?? "",
+    client_secret: process.env.STRAVA_CLIENT_SECRET ?? "",
+    ...params,
+  });
+  const res = await fetch(TOKEN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Strava token request failed (${res.status}): ${text.slice(0, 200)}`);
+  }
+  return (await res.json()) as TokenResponse;
+}
+
+export async function exchangeCode(code: string): Promise<void> {
+  const token = await requestToken({ grant_type: "authorization_code", code });
+  saveStravaAuth({
+    access_token: token.access_token,
+    refresh_token: token.refresh_token,
+    expires_at: token.expires_at,
+  });
+  if (token.athlete) {
+    const name = [token.athlete.firstname, token.athlete.lastname]
+      .filter(Boolean)
+      .join(" ");
+    if (name) setMeta("athlete_name", name);
+  }
+}
+
+/** Returns a valid access token, refreshing it first when close to expiry. */
+async function getAccessToken(): Promise<string> {
+  const auth = getStravaAuth();
+  if (!auth) throw new Error("Strava is not connected.");
+  const now = Math.floor(Date.now() / 1000);
+  if (auth.expires_at > now + 120) return auth.access_token;
+  const token = await requestToken({
+    grant_type: "refresh_token",
+    refresh_token: auth.refresh_token,
+  });
+  saveStravaAuth({
+    access_token: token.access_token,
+    refresh_token: token.refresh_token,
+    expires_at: token.expires_at,
+  });
+  return token.access_token;
+}
+
+async function apiGet<T>(pathname: string, params?: Record<string, string>): Promise<T> {
+  const token = await getAccessToken();
+  const url = new URL(`${API_BASE}${pathname}`);
+  for (const [key, value] of Object.entries(params ?? {})) {
+    url.searchParams.set(key, value);
+  }
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!res.ok) {
+    if (res.status === 401) throw new Error("Strava rejected the token. Reconnect from Settings.");
+    if (res.status === 429) throw new Error("Strava rate limit reached. Try again in a few minutes.");
+    throw new Error(`Strava API error (${res.status}).`);
+  }
+  return (await res.json()) as T;
+}
+
+// ---------------------------------------------------------------------------
+// Gear
+// ---------------------------------------------------------------------------
+
+interface StravaAthlete {
+  shoes?: Array<{ id: string; name: string; distance?: number; retired?: boolean }>;
+}
+
+export async function fetchAthleteGear(): Promise<StravaGear[]> {
+  const athlete = await apiGet<StravaAthlete>("/athlete");
+  return (athlete.shoes ?? []).map((g) => ({
+    id: g.id,
+    name: g.name,
+    distance: g.distance,
+    retired: g.retired,
+  }));
+}
+
+/** Gear list for dropdowns; null when not connected or the request fails. */
+export async function tryFetchGear(): Promise<StravaGear[] | null> {
+  if (!stravaConfigured() || !isStravaConnected()) return null;
+  try {
+    return await fetchAthleteGear();
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Activity sync
+// ---------------------------------------------------------------------------
+
+interface StravaActivity {
+  id: number;
+  name?: string;
+  sport_type?: string;
+  type?: string;
+  start_date?: string;
+  distance?: number;
+  moving_time?: number;
+  average_heartrate?: number;
+  total_elevation_gain?: number;
+  gear_id?: string | null;
+}
+
+export interface SyncResult {
+  imported: number;
+  pendingNew: number;
+  pendingTotal: number;
+}
+
+/**
+ * Pulls activities from Strava, newest first, only asking for activities that
+ * started after the most recent synced one. Activities older than the baseline
+ * date are stored as confirmed with no splits: they show up in the log but the
+ * shoe baselines already cover their mileage. Everything newer lands in the
+ * review queue with one pre-filled split.
+ */
+export async function syncActivities(): Promise<SyncResult> {
+  const afterEpoch = latestSyncedStartEpoch();
+  const baselineIso = getMeta("baseline_date");
+  const baselineMs = baselineIso ? Date.parse(baselineIso) : 0;
+
+  let imported = 0;
+  let pendingNew = 0;
+  const perPage = 100;
+
+  for (let page = 1; page <= 50; page++) {
+    const params: Record<string, string> = {
+      per_page: String(perPage),
+      page: String(page),
+    };
+    if (afterEpoch) params.after = String(afterEpoch);
+
+    const batch = await apiGet<StravaActivity[]>("/athlete/activities", params);
+    if (batch.length === 0) break;
+
+    for (const activity of batch) {
+      if (!activity.id || !activity.start_date) continue;
+      if (activityExistsByStravaId(activity.id)) continue;
+
+      const distanceKm = activity.distance ? round2(activity.distance / 1000) : 0;
+      const movingS = activity.moving_time ?? null;
+      const pace =
+        activity.distance && activity.distance > 0 && movingS
+          ? Math.round(movingS / (activity.distance / 1000))
+          : null;
+      const sport = activity.sport_type ?? activity.type ?? null;
+      const preBaseline = Date.parse(activity.start_date) < baselineMs;
+
+      let status: "confirmed" | "pending_review";
+      let splits: SplitInput[] = [];
+      if (preBaseline) {
+        // History only: visible in the log, zero shoe mileage.
+        status = "confirmed";
+      } else {
+        status = "pending_review";
+        const matchedShoeId = activity.gear_id ? findShoeIdByGear(activity.gear_id) : null;
+        if (isRunSport(sport) && distanceKm > 0) {
+          splits = [{ shoe_id: matchedShoeId, km: distanceKm }];
+        } else if (matchedShoeId && distanceKm > 0) {
+          splits = [{ shoe_id: matchedShoeId, km: distanceKm }];
+        }
+        pendingNew++;
+      }
+
+      insertSyncedActivity(
+        {
+          strava_id: activity.id,
+          name: activity.name ?? null,
+          sport_type: sport,
+          started_at: activity.start_date,
+          distance_km: distanceKm,
+          moving_time_s: movingS,
+          avg_pace_s_per_km: pace,
+          avg_hr: activity.average_heartrate ?? null,
+          elevation_gain_m: activity.total_elevation_gain ?? null,
+          status,
+          raw_json: JSON.stringify(activity),
+        },
+        splits
+      );
+      imported++;
+    }
+
+    if (batch.length < perPage) break;
+  }
+
+  setMeta("last_sync_at", new Date().toISOString());
+  return { imported, pendingNew, pendingTotal: countPending() };
+}

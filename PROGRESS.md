@@ -85,4 +85,4 @@ Engine modelling choices (reversible; documented so you can veto):
 ## Prod verification summary
 - Phase 3 (`/fitness`): prod verified yes — https://training-hub-psi-one.vercel.app/fitness (Fitness 48 / Fatigue 52 / Form −5).
 - Phase 6 (`/races/compare`): prod verified yes — real block + head-to-head numbers render on prod.
-- Phase 4 (coach + digest): prod verify pending in this commit (shares the same Turso data + `ANTHROPIC_API_KEY` must also be set in Vercel).
+- Phase 4 (coach + digest): prod verified yes — `ANTHROPIC_API_KEY` is set in Vercel; a live coach call on prod (`/activity/30`) returned a correct, data-grounded reply (4:51/km goal pace, 168 bpm avg ≈ 95% of LTHR).

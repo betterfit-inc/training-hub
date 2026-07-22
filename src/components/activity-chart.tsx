@@ -114,7 +114,7 @@ export function ActivityChart({
         data: streams.cadence,
         color: "var(--chart-4)",
         label: t.chart.cadence,
-        unit: "rpm",
+        unit: isRide ? "rpm" : "spm",
         invert: false,
         area: false,
         fmt: (v) => fmtCadence(v),
@@ -133,7 +133,7 @@ export function ActivityChart({
       },
     ];
     return defs.filter((d): d is SeriesDef => d.data != null);
-  }, [streams, t]);
+  }, [streams, t, isRide]);
 
   const available = useMemo(() => allSeries.map((s) => s.key), [allSeries]);
   const hasElevation = available.includes("elevation");

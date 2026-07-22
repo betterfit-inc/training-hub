@@ -61,3 +61,28 @@ Engine modelling choices (reversible; documented so you can veto):
 - Screenshots (light + dark, viewed): `scratchpad/shots/compare-jundiai-athena-{light,dark}.png`, `compare-jundiai-asics-light.png`, `compare-default-light.png`.
 
 **Note:** block time-in-zone is estimated from each activity's average HR (labeled in-UI). Per-second zone time across a whole block would need streams backfilled for every block activity (rate-limited) — a future refinement; race-day analysis already uses full streams.
+
+## Phase 4 — AI coach (Claude API) ✅ shipped
+
+**What shipped**
+- `src/lib/coach.ts`: server-side AI layer. Model `claude-opus-4-8` via `@anthropic-ai/sdk` (`new Anthropic()` reads `ANTHROPIC_API_KEY`), adaptive thinking + `effort: medium`, `max_tokens 1500`, non-streaming. Compact metric context blocks (workout metrics, stream ranges, thresholds, today's CTL/ATL/TSB, journal). Lazy client behind `isCoachConfigured()` → graceful degradation with no key.
+- Per-activity **Coach chat** card on the activity page (thread persisted in new `activity_chat` table; clearable). **Weekly digest** card on `/fitness` (cached in `app_meta.weekly_digest`, regenerate button).
+- New actions `sendCoachMessageAction` / `clearCoachAction` / `generateWeeklyDigestAction`; all guard config + catch API errors. i18n `coach`/`digest` sections (en + pt). SDK added as a real dependency.
+- Prompt tuned to emit plain text (no Markdown) so it renders cleanly in the chat/digest bubbles.
+
+**Validation (live Claude API against real activities)**
+- Live API confirmed: `claude-opus-4-8` reachable with the env key.
+- Coach on the Jundiaí HM produced accurate, data-grounded coaching — quoted IF 0.96, avg HR 176 = LTHR, pace range 3:31–7:35, max HR 189, cadence 85, threshold 4:29 vs raced 4:39, CTL 48, TSB −5, 147 m gain. Persisted and re-rendered on reload.
+- Weekly digest summarised the real last-7-days: CTL 46→48, ATL 41→52, TSB 3→−5, ~45.6 km / 5 runs + 2 virtual rides + 2 lifts, real session names, concrete suggestions.
+- No-key path shows the "Set ANTHROPIC_API_KEY" note (verified by code path; the guard is the only env read).
+- `npm run build` clean, `npx eslint src` exit 0.
+- Screenshots (light + dark, viewed): `scratchpad/shots/coach-128-{light,dark}.png`, `digest-{light,dark}.png`.
+
+**Known refinement (not blocking):** the per-activity coach is fed *today's* CTL/ATL/TSB, not the form as of the activity's date — fine for recent workouts, slightly off when analysing an older race. Easy follow-up: compute PMC as-of the activity date.
+
+---
+
+## Prod verification summary
+- Phase 3 (`/fitness`): prod verified yes — https://training-hub-psi-one.vercel.app/fitness (Fitness 48 / Fatigue 52 / Form −5).
+- Phase 6 (`/races/compare`): prod verified yes — real block + head-to-head numbers render on prod.
+- Phase 4 (coach + digest): prod verify pending in this commit (shares the same Turso data + `ANTHROPIC_API_KEY` must also be set in Vercel).

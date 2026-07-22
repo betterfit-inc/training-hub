@@ -1,9 +1,11 @@
 import { GaugeIcon } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/empty-state";
 import { FilterPill } from "@/components/filter-pill";
 import { PmcChart, type PmcSeriesPoint, type WeeklyBar } from "@/components/pmc-chart";
-import { getAthleteThresholds, listActivityLoadsForPmc } from "@/lib/db";
+import { WeeklyDigest } from "@/components/weekly-digest";
+import { getAthleteThresholds, getWeeklyDigest, listActivityLoadsForPmc } from "@/lib/db";
+import { isCoachConfigured } from "@/lib/coach";
 import { getDict } from "@/lib/lang";
 import { computePmc, formState, type FormStateKey } from "@/lib/fitness";
 import { localDateInputValue, mondayOf } from "@/lib/format";
@@ -130,6 +132,9 @@ export default async function FitnessPage({ searchParams }: PageProps<"/fitness"
     .sort((a, b) => (a[0] < b[0] ? -1 : 1))
     .map(([date, load]) => ({ date, load }));
 
+  const digest = await getWeeklyDigest();
+  const coachConfigured = isCoachConfigured();
+
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
       <h1 className="font-display text-4xl font-bold uppercase">{t.fitness.title}</h1>
@@ -174,6 +179,16 @@ export default async function FitnessPage({ searchParams }: PageProps<"/fitness"
       <Card className="mt-5">
         <CardContent>
           <PmcChart points={windowPoints} weekly={weekly} />
+        </CardContent>
+      </Card>
+
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle>{t.digest.title}</CardTitle>
+          <CardDescription>{t.digest.subtitle}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <WeeklyDigest digest={digest} configured={coachConfigured} />
         </CardContent>
       </Card>
     </div>

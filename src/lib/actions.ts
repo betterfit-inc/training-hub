@@ -6,13 +6,20 @@ import { dictionaries, splitErrorText, isLang, type Dict } from "./i18n";
 import { LANG_COOKIE, getLang } from "./lang";
 import { storePhoto } from "./storage";
 import {
+  addActivityChatMessage,
+  clearActivityChat,
   clearStravaAuth,
   createBike,
   createManualActivity,
   createShoe,
   getActivity,
+  getActivityLoad,
+  getAthleteThresholds,
   getBike,
   getShoe,
+  listActivitiesSince,
+  listActivityChat,
+  listActivityLoadsForPmc,
   recomputeActivityLoad,
   recomputeAllLoads,
   replaceActivitySplits,
@@ -24,6 +31,7 @@ import {
   setBikeRetired,
   setShoeGear,
   setShoeRetired,
+  setWeeklyDigest,
   updateActivityJournal,
   updateBike,
   updateShoe,
@@ -32,7 +40,26 @@ import {
   type JournalFields,
   type ShoeFields,
 } from "./db";
-import { stravaConfigured, isStravaConnected, syncActivities, type SyncResult } from "./strava";
+import {
+  buildActivityContext,
+  buildDigestContext,
+  isCoachConfigured,
+  runCoachChat,
+  runWeeklyDigest,
+  summarizeStreams,
+  type CoachLoad,
+  type CoachPmc,
+  type CoachStreamSummary,
+} from "./coach";
+import { computeLoad, computePmc, type PmcPoint } from "./fitness";
+import { localDateInputValue } from "./format";
+import {
+  ensureActivityStreams,
+  stravaConfigured,
+  isStravaConnected,
+  syncActivities,
+  type SyncResult,
+} from "./strava";
 import { validateSplits } from "./validate";
 import type { Feeling, SplitInput } from "./types";
 
@@ -503,5 +530,162 @@ export async function createManualActivityAction(input: {
     return { ok: true };
   } catch (error) {
     return fail(error, t.errors.generic);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// AI coach (Claude API)
+// ---------------------------------------------------------------------------
+
+export type CoachMessageResult = { ok: true; reply: string } | { ok: false; error: string };
+export type WeeklyDigestResult =
+  | { ok: true; text: string; generatedAt: string }
+  | { ok: false; error: string };
+
+function parseLocalDate(key: string): Date {
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+/** Inclusive list of local YYYY-MM-DD day keys from `from` to `to`. */
+function eachDay(from: string, to: string): string[] {
+  const out: string[] = [];
+  const cursor = parseLocalDate(from);
+  const end = parseLocalDate(to);
+  while (cursor <= end) {
+    out.push(localDateInputValue(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return out;
+}
+
+/**
+ * Whole-history Performance Management Chart, gap-filled to today. Mirrors the
+ * fitness page: sum TSS per local calendar day, then run the EWMA. Empty when no
+ * confirmed activity has a training load yet.
+ */
+async function buildPmc(): Promise<PmcPoint[]> {
+  const loads = await listActivityLoadsForPmc();
+  if (loads.length === 0) return [];
+  const byDay = new Map<string, number>();
+  for (const load of loads) {
+    const key = localDateInputValue(new Date(load.started_at));
+    byDay.set(key, (byDay.get(key) ?? 0) + load.tss);
+  }
+  const dayKeys = [...byDay.keys()].sort();
+  const today = localDateInputValue(new Date());
+  const lastDay = dayKeys[dayKeys.length - 1] > today ? dayKeys[dayKeys.length - 1] : today;
+  const daily = eachDay(dayKeys[0], lastDay).map((date) => ({ date, load: byDay.get(date) ?? 0 }));
+  return computePmc(daily);
+}
+
+function pmcPoint(point: PmcPoint | null | undefined): CoachPmc | null {
+  return point ? { ctl: point.ctl, atl: point.atl, tsb: point.tsb } : null;
+}
+
+export async function sendCoachMessageAction(input: {
+  activityId: number;
+  message: string;
+}): Promise<CoachMessageResult> {
+  const t = await dict();
+  if (!isCoachConfigured()) return { ok: false, error: t.errors.coachNotConfigured };
+  const message = input.message.trim();
+  if (!message) return { ok: false, error: t.errors.generic };
+  try {
+    const activity = await getActivity(input.activityId);
+    if (!activity) return { ok: false, error: t.errors.activityNotFound };
+
+    const thresholds = await getAthleteThresholds();
+
+    const stored = await getActivityLoad(activity.id);
+    let load: CoachLoad | null = null;
+    if (stored) {
+      load = { tss: stored.tss, method: stored.method, intensityFactor: stored.intensity_factor };
+    } else {
+      const computed = computeLoad(activity, thresholds);
+      if (computed) {
+        load = {
+          tss: computed.tss,
+          method: computed.method,
+          intensityFactor: computed.intensityFactor,
+        };
+      }
+    }
+
+    const pmc = await buildPmc();
+    const todayPmc = pmcPoint(pmc[pmc.length - 1]);
+
+    // Cheap: streams are cached in the DB after the first activity view; only a
+    // cold, never-viewed activity would fetch from Strava here.
+    let streams: CoachStreamSummary | null = null;
+    try {
+      const raw = await ensureActivityStreams(activity);
+      if (raw) streams = summarizeStreams(raw);
+    } catch {
+      streams = null;
+    }
+
+    const context = buildActivityContext({
+      activity,
+      load,
+      thresholds,
+      pmc: todayPmc,
+      streams,
+      journal: {
+        rpe: activity.rpe,
+        feeling: activity.feeling,
+        workoutNotes: activity.workout_notes,
+        healthNotes: activity.health_notes,
+      },
+    });
+
+    const history = (await listActivityChat(activity.id)).map((row) => ({
+      role: row.role === "assistant" ? ("assistant" as const) : ("user" as const),
+      content: row.content,
+    }));
+
+    await addActivityChatMessage(activity.id, "user", message);
+    const reply = await runCoachChat(context, history, message);
+    await addActivityChatMessage(activity.id, "assistant", reply);
+    refreshAll();
+    return { ok: true, reply };
+  } catch (error) {
+    return fail(error, t.errors.coachFailed);
+  }
+}
+
+export async function clearCoachAction(activityId: number): Promise<ActionResult> {
+  const t = await dict();
+  try {
+    await clearActivityChat(activityId);
+    refreshAll();
+    return { ok: true };
+  } catch (error) {
+    return fail(error, t.errors.generic);
+  }
+}
+
+export async function generateWeeklyDigestAction(): Promise<WeeklyDigestResult> {
+  const t = await dict();
+  if (!isCoachConfigured()) return { ok: false, error: t.errors.coachNotConfigured };
+  try {
+    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const [activities, thresholds, pmc] = await Promise.all([
+      listActivitiesSince(since),
+      getAthleteThresholds(),
+      buildPmc(),
+    ]);
+    const context = buildDigestContext({
+      activities,
+      thresholds,
+      now: pmcPoint(pmc[pmc.length - 1]),
+      weekAgo: pmcPoint(pmc.length >= 8 ? pmc[pmc.length - 8] : pmc[0]),
+    });
+    const text = await runWeeklyDigest(context);
+    const saved = await setWeeklyDigest(text);
+    refreshAll();
+    return { ok: true, text: saved.text, generatedAt: saved.generatedAt };
+  } catch (error) {
+    return fail(error, t.errors.coachFailed);
   }
 }

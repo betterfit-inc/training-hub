@@ -1,16 +1,25 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeftIcon, CheckCircle2Icon, ClockIcon } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { MedalIcon } from "lucide-react";
 import { ActivityChart } from "@/components/activity-chart";
 import { ActivityLoadControl } from "@/components/activity-load-control";
 import { BikeSection } from "@/components/bike-section";
+import { CoachChat } from "@/components/coach-chat";
 import { RaceControl } from "@/components/race-control";
 import { JournalEditor } from "@/components/journal-editor";
 import { SplitsSection } from "@/components/splits-section";
 import { SportIcon } from "@/components/sport-icon";
-import { getActivity, getActivityLoad, getAthleteThresholds, listBikes, listShoes } from "@/lib/db";
+import {
+  getActivity,
+  getActivityLoad,
+  getAthleteThresholds,
+  listActivityChat,
+  listBikes,
+  listShoes,
+} from "@/lib/db";
+import { isCoachConfigured } from "@/lib/coach";
 import { computeLoad } from "@/lib/fitness";
 import { getDict } from "@/lib/lang";
 import {
@@ -227,6 +236,12 @@ export default async function ActivityPage({ params }: PageProps<"/activity/[id]
     laps.length > 1 && laps.some((lap) => Math.abs((lap.distance ?? 0) - 1000) > 150);
   const description = detail?.description?.trim();
 
+  const coachConfigured = isCoachConfigured();
+  const coachMessages = (await listActivityChat(activity.id)).map((m) => ({
+    role: m.role === "assistant" ? ("assistant" as const) : ("user" as const),
+    content: m.content,
+  }));
+
   let rawPretty: string | null = null;
   const rawSource = detail ?? (activity.raw_json ? activity.raw_json : null);
   if (rawSource) {
@@ -402,6 +417,20 @@ export default async function ActivityPage({ params }: PageProps<"/activity/[id]
         </CardHeader>
         <CardContent>
           <JournalEditor activity={activity} />
+        </CardContent>
+      </Card>
+
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle>{t.coach.title}</CardTitle>
+          <CardDescription>{t.coach.subtitle}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <CoachChat
+            activityId={activity.id}
+            messages={coachMessages}
+            configured={coachConfigured}
+          />
         </CardContent>
       </Card>
 

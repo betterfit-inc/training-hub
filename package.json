@@ -10,6 +10,8 @@
     "lint": "eslint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:unit": "vitest run",
     "seed": "tsx scripts/seed.ts",
     "seed:clear": "tsx scripts/seed.ts --clear",
     "backfill:load": "tsx scripts/backfill-load.ts"
@@ -41,6 +43,7 @@
     "prettier": "^3.9.6",
     "tailwindcss": "^4",
     "tsx": "^4.23.1",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.10"
   }
 }

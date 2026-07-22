@@ -228,7 +228,10 @@ export function ActivityChart({
   const xTicks = useMemo(() => {
     if (!xExtent) return [];
     const T = 5;
-    return Array.from({ length: T + 1 }, (_, k) => xExtent[0] + ((xExtent[1] - xExtent[0]) * k) / T);
+    return Array.from(
+      { length: T + 1 },
+      (_, k) => xExtent[0] + ((xExtent[1] - xExtent[0]) * k) / T
+    );
   }, [xExtent]);
 
   return (
@@ -341,7 +344,8 @@ export function ActivityChart({
                 const flush = () => {
                   if (run.length > 1) {
                     areaPath += `M${xPx(run[0][0]).toFixed(1)},${bottom.toFixed(1)} `;
-                    for (const [x, y] of run) areaPath += `L${xPx(x).toFixed(1)},${yPx(y).toFixed(1)} `;
+                    for (const [x, y] of run)
+                      areaPath += `L${xPx(x).toFixed(1)},${yPx(y).toFixed(1)} `;
                     areaPath += `L${xPx(run[run.length - 1][0]).toFixed(1)},${bottom.toFixed(1)} Z `;
                   }
                   run = [];
@@ -427,7 +431,14 @@ export function ActivityChart({
                   ))}
 
                   {hoverVal != null && hoverX != null ? (
-                    <circle cx={hoverX} cy={yPx(hoverVal)} r={3.5} fill={s.color} stroke="var(--card)" strokeWidth={1.5} />
+                    <circle
+                      cx={hoverX}
+                      cy={yPx(hoverVal)}
+                      r={3.5}
+                      fill={s.color}
+                      stroke="var(--card)"
+                      strokeWidth={1.5}
+                    />
                   ) : null}
                 </g>
               );
@@ -439,7 +450,15 @@ export function ActivityChart({
               const axisY = TOP + shown.length * PANEL_H + Math.max(0, shown.length - 1) * GAP;
               return (
                 <g key={i}>
-                  <line x1={x} y1={TOP} x2={x} y2={axisY} stroke="var(--border)" strokeWidth={1} opacity={0.25} />
+                  <line
+                    x1={x}
+                    y1={TOP}
+                    x2={x}
+                    y2={axisY}
+                    stroke="var(--border)"
+                    strokeWidth={1}
+                    opacity={0.25}
+                  />
                   <text
                     x={x}
                     y={axisY + 15}
@@ -478,16 +497,18 @@ export function ActivityChart({
                 transform: `translateX(${hoverX > VBW / 2 ? "-100%" : "0"}) translateX(${hoverX > VBW / 2 ? "-8px" : "8px"})`,
               }}
             >
-              <div className="mb-1 font-mono font-medium text-foreground">
-                {xLabel(xs[hover]!)}
-              </div>
+              <div className="mb-1 font-mono font-medium text-foreground">{xLabel(xs[hover]!)}</div>
               <div className="space-y-0.5">
                 {shown.map((s) => {
                   const v = s.data[hover];
                   return (
                     <div key={s.key} className="flex items-center justify-between gap-3">
                       <span className="flex items-center gap-1.5 text-muted-foreground">
-                        <span className="size-2 rounded-full" style={{ backgroundColor: s.color }} aria-hidden />
+                        <span
+                          className="size-2 rounded-full"
+                          style={{ backgroundColor: s.color }}
+                          aria-hidden
+                        />
                         {s.label}
                       </span>
                       <span className="font-mono tabular-nums" style={{ color: s.color }}>

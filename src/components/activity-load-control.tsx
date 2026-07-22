@@ -105,7 +105,12 @@ export function ActivityLoadControl({
       ) : methodLabel ? (
         <span className="text-xs text-muted-foreground">· {methodLabel}</span>
       ) : null}
-      <Button size="icon-sm" variant="ghost" aria-label={t.detail.editLoad} onClick={() => setEditing(true)}>
+      <Button
+        size="icon-sm"
+        variant="ghost"
+        aria-label={t.detail.editLoad}
+        onClick={() => setEditing(true)}
+      >
         <PencilIcon />
       </Button>
       {source === "manual" ? (

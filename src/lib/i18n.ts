@@ -320,8 +320,7 @@ const en = {
     countSuffix: "ridden",
     addBike: "Add bike",
     firstBikeTitle: "Add your first bike",
-    firstBikeBody:
-      "Track distance per bike and how much of it was indoor versus outdoor riding.",
+    firstBikeBody: "Track distance per bike and how much of it was indoor versus outdoor riding.",
     retiredSection: "Retired",
     noRole: "no type set",
     gearLabel: "Strava gear: {name}",
@@ -415,7 +414,13 @@ const en = {
   insights: {
     title: "Insights",
     subtitle: "Everything you confirmed in the last {window}.",
-    windows: { "30d": "30 days", "60d": "60 days", "90d": "90 days", "6m": "6 months", "1y": "1 year" } as Record<string, string>,
+    windows: {
+      "30d": "30 days",
+      "60d": "60 days",
+      "90d": "90 days",
+      "6m": "6 months",
+      "1y": "1 year",
+    } as Record<string, string>,
     activeDays: "Active days",
     ofWindow: "of {n}",
     sessions: "Sessions",
@@ -867,8 +872,7 @@ const pt: Dict = {
     countSuffix: "pedalados",
     addBike: "Adicionar bike",
     firstBikeTitle: "Adicione sua primeira bike",
-    firstBikeBody:
-      "Acompanhe a distância por bike e quanto foi indoor versus outdoor.",
+    firstBikeBody: "Acompanhe a distância por bike e quanto foi indoor versus outdoor.",
     retiredSection: "Aposentadas",
     noRole: "sem tipo definido",
     gearLabel: "Equipamento Strava: {name}",
@@ -962,7 +966,13 @@ const pt: Dict = {
   insights: {
     title: "Insights",
     subtitle: "Tudo que você confirmou nos últimos {window}.",
-    windows: { "30d": "30 dias", "60d": "60 dias", "90d": "90 dias", "6m": "6 meses", "1y": "1 ano" },
+    windows: {
+      "30d": "30 dias",
+      "60d": "60 dias",
+      "90d": "90 dias",
+      "6m": "6 meses",
+      "1y": "1 ano",
+    },
     activeDays: "Dias ativos",
     ofWindow: "de {n}",
     sessions: "Sessões",
@@ -1065,7 +1075,8 @@ const pt: Dict = {
     gearMatching: "Vínculo de equipamentos",
     gearMatchingBody:
       "Vincule cada tênis ao equipamento do Strava para as atividades sincronizadas escolherem o tênis certo sozinhas.",
-    gearLoadFailed: "Não foi possível carregar seus equipamentos do Strava agora. Tente mais tarde.",
+    gearLoadFailed:
+      "Não foi possível carregar seus equipamentos do Strava agora. Tente mais tarde.",
     noStravaShoes: "Nenhum tênis encontrado no seu perfil do Strava.",
     bikeMatching: "Vínculo de bikes",
     bikeMatchingBody:

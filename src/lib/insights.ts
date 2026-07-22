@@ -35,10 +35,7 @@ export function computeInsights(activities: Activity[], windowDays: number): Ins
   const sinceMs = Date.now() - windowDays * 24 * 60 * 60 * 1000;
 
   const allDays = new Set<string>();
-  const byCategory = new Map<
-    SportCategory,
-    CategoryStats & { days: Set<string> }
-  >();
+  const byCategory = new Map<SportCategory, CategoryStats & { days: Set<string> }>();
   let sessions = 0;
   let km = 0;
   let movingS = 0;

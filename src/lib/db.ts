@@ -149,7 +149,12 @@ const BASELINE_BIKES: Array<{
   initial_km: number;
 }> = [
   { name: "TSW TR10 Speed Bike", role: "road", photo: "bike-tsw-tr10-one.png", initial_km: 0 },
-  { name: "TSW Stamina 2025", role: "mountain bike", photo: "bike-tsw-stamina.png", initial_km: 467 },
+  {
+    name: "TSW Stamina 2025",
+    role: "mountain bike",
+    photo: "bike-tsw-stamina.png",
+    initial_km: 467,
+  },
 ];
 
 // Real shoes with corrected current mileage (includes the 18 km moved from the
@@ -159,7 +164,11 @@ const BASELINE_SHOES: Array<{ name: string; initial_km: number; role: string }> 
   { name: "Adidas Drive RC", initial_km: 474.1, role: "intervals" },
   { name: "Adidas Evo SL Preto e Branco", initial_km: 452.6, role: "everyday shoe" },
   { name: "Adidas Evo SL Preto e Cinza", initial_km: 236.2, role: "everyday shoe" },
-  { name: "ASICS Superblast 3", initial_km: 291.9, role: "easy runs, long runs, injury recovery shoe" },
+  {
+    name: "ASICS Superblast 3",
+    initial_km: 291.9,
+    role: "easy runs, long runs, injury recovery shoe",
+  },
   { name: "Salomon S/Lab Ultra 3 V2", initial_km: 141.1, role: "trail shoe" },
 ];
 
@@ -181,9 +190,7 @@ async function migrate(): Promise<void> {
   if (!names.has("bike_id")) {
     await client.execute("ALTER TABLE activities ADD COLUMN bike_id INTEGER REFERENCES bikes(id)");
   }
-  await client.execute(
-    "CREATE INDEX IF NOT EXISTS idx_activities_bike_id ON activities(bike_id)"
-  );
+  await client.execute("CREATE INDEX IF NOT EXISTS idx_activities_bike_id ON activities(bike_id)");
   // Migration 005: race marking for block comparison.
   if (!names.has("is_race")) {
     await client.execute("ALTER TABLE activities ADD COLUMN is_race INTEGER NOT NULL DEFAULT 0");
@@ -224,9 +231,7 @@ async function migrate(): Promise<void> {
         args: [199, 50, 176, 269, 150, new Date().toISOString()],
       });
     }
-    const baseline = await tx.execute(
-      "SELECT value FROM app_meta WHERE key = 'baseline_date'"
-    );
+    const baseline = await tx.execute("SELECT value FROM app_meta WHERE key = 'baseline_date'");
     if (baseline.rows.length === 0) {
       await tx.execute({
         sql: "INSERT INTO app_meta (key, value) VALUES ('baseline_date', ?)",
@@ -397,9 +402,7 @@ export async function setShoeGear(id: number, gearId: string | null): Promise<vo
 }
 
 export async function findShoeIdByGear(gearId: string): Promise<number | null> {
-  const row = await one<{ id: number }>("SELECT id FROM shoes WHERE strava_gear_id = ?", [
-    gearId,
-  ]);
+  const row = await one<{ id: number }>("SELECT id FROM shoes WHERE strava_gear_id = ?", [gearId]);
   return row?.id ?? null;
 }
 
@@ -625,8 +628,7 @@ export interface SyncedActivityInput {
   bike_id: number | null;
 }
 
-const INSERT_SPLIT_SQL =
-  "INSERT INTO activity_splits (activity_id, shoe_id, km) VALUES (?, ?, ?)";
+const INSERT_SPLIT_SQL = "INSERT INTO activity_splits (activity_id, shoe_id, km) VALUES (?, ?, ?)";
 
 export async function insertSyncedActivity(
   input: SyncedActivityInput,
@@ -682,14 +684,7 @@ export async function confirmActivity(
     {
       sql: `UPDATE activities SET status = 'confirmed', rpe = ?, feeling = ?,
             workout_notes = ?, health_notes = ?, bike_id = ? WHERE id = ?`,
-      args: [
-        journal.rpe,
-        journal.feeling,
-        journal.workout_notes,
-        journal.health_notes,
-        bikeId,
-        id,
-      ],
+      args: [journal.rpe, journal.feeling, journal.workout_notes, journal.health_notes, bikeId, id],
     },
     { sql: "DELETE FROM activity_splits WHERE activity_id = ?", args: [id] },
     ...splits.map((split) => ({
@@ -967,8 +962,12 @@ export async function recomputeAllLoads(): Promise<{ count: number }> {
   const activities = await many<ActivityLoadInput>(
     `SELECT ${ACTIVITY_LOAD_FIELDS} FROM activities WHERE status = 'confirmed'`
   );
-  const rows: { activityId: number; tss: number; method: LoadMethod; intensityFactor: number | null }[] =
-    [];
+  const rows: {
+    activityId: number;
+    tss: number;
+    method: LoadMethod;
+    intensityFactor: number | null;
+  }[] = [];
   for (const activity of activities) {
     const load = computeLoad(activity, thresholds);
     if (load) {

@@ -13,7 +13,15 @@ import { useI18n } from "@/components/i18n-provider";
 import { updateJournalAction } from "@/lib/actions";
 import type { Activity, Feeling } from "@/lib/types";
 
-function NoteBlock({ label, text, emptyText }: { label: string; text: string | null; emptyText: string }) {
+function NoteBlock({
+  label,
+  text,
+  emptyText,
+}: {
+  label: string;
+  text: string | null;
+  emptyText: string;
+}) {
   return (
     <div>
       <div className="text-[11px] font-medium tracking-wider text-muted-foreground uppercase">

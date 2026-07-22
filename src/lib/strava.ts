@@ -86,9 +86,7 @@ export async function exchangeCode(code: string): Promise<void> {
     expires_at: token.expires_at,
   });
   if (token.athlete) {
-    const name = [token.athlete.firstname, token.athlete.lastname]
-      .filter(Boolean)
-      .join(" ");
+    const name = [token.athlete.firstname, token.athlete.lastname].filter(Boolean).join(" ");
     if (name) await setMeta("athlete_name", name);
   }
 }
@@ -124,7 +122,8 @@ async function apiGet<T>(pathname: string, params?: Record<string, string>): Pro
   });
   if (!res.ok) {
     if (res.status === 401) throw new Error("Strava rejected the token. Reconnect from Settings.");
-    if (res.status === 429) throw new Error("Strava rate limit reached. Try again in a few minutes.");
+    if (res.status === 429)
+      throw new Error("Strava rate limit reached. Try again in a few minutes.");
     throw new Error(`Strava API error (${res.status}).`);
   }
   return (await res.json()) as T;

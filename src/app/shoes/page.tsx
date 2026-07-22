@@ -69,7 +69,7 @@ export default async function ShoesPage() {
                 shoe={shoe}
                 gearOptions={gear}
                 gearName={
-                  shoe.strava_gear_id ? gearNameById.get(shoe.strava_gear_id) ?? null : null
+                  shoe.strava_gear_id ? (gearNameById.get(shoe.strava_gear_id) ?? null) : null
                 }
                 connected={connected}
                 t={t}
@@ -89,7 +89,7 @@ export default async function ShoesPage() {
                     shoe={shoe}
                     gearOptions={gear}
                     gearName={
-                      shoe.strava_gear_id ? gearNameById.get(shoe.strava_gear_id) ?? null : null
+                      shoe.strava_gear_id ? (gearNameById.get(shoe.strava_gear_id) ?? null) : null
                     }
                     connected={connected}
                     t={t}

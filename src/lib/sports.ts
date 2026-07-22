@@ -1,11 +1,4 @@
-export type SportCategory =
-  | "run"
-  | "bike"
-  | "strength"
-  | "walk"
-  | "elliptical"
-  | "swim"
-  | "other";
+export type SportCategory = "run" | "bike" | "strength" | "walk" | "elliptical" | "swim" | "other";
 
 export const SPORT_CATEGORIES: Array<{ key: SportCategory; label: string }> = [
   { key: "run", label: "Run" },

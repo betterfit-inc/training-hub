@@ -95,9 +95,7 @@ export async function setLangAction(lang: string): Promise<void> {
 // Sync
 // ---------------------------------------------------------------------------
 
-export type SyncActionResult =
-  | ({ ok: true } & SyncResult)
-  | { ok: false; error: string };
+export type SyncActionResult = ({ ok: true } & SyncResult) | { ok: false; error: string };
 
 export async function syncNowAction(): Promise<SyncActionResult> {
   const t = await dict();
@@ -169,8 +167,7 @@ export async function confirmActivityAction(input: {
     const journal = normalizeJournal(input, t);
     if ("error" in journal) return { ok: false, error: journal.error };
 
-    const bikeId =
-      input.bikeId != null && (await getBike(input.bikeId)) ? input.bikeId : null;
+    const bikeId = input.bikeId != null && (await getBike(input.bikeId)) ? input.bikeId : null;
 
     await confirmActivity(input.activityId, journal, splits, bikeId);
     refreshAll();
@@ -539,8 +536,7 @@ export async function createManualActivityAction(input: {
 
 export type CoachMessageResult = { ok: true; reply: string } | { ok: false; error: string };
 export type WeeklyDigestResult =
-  | { ok: true; text: string; generatedAt: string }
-  | { ok: false; error: string };
+  { ok: true; text: string; generatedAt: string } | { ok: false; error: string };
 
 function parseLocalDate(key: string): Date {
   const [y, m, d] = key.split("-").map(Number);

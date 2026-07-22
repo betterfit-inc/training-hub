@@ -94,16 +94,13 @@ export function Header({
       {autoSync && configured ? <AutoSync /> : null}
       <div className="mx-auto flex h-14 max-w-5xl items-center gap-4 px-4 sm:gap-6 sm:px-6">
         <Link href="/" className="flex shrink-0 items-center gap-1.5">
-          <span className="font-display text-xl font-bold italic tracking-tight">
-            Training Hub
-          </span>
+          <span className="font-display text-xl font-bold italic tracking-tight">Training Hub</span>
           <span aria-hidden className="mt-1.5 inline-block size-1.5 rounded-full bg-primary" />
         </Link>
 
         <nav aria-label="Main" className="flex min-w-0 items-center gap-0.5 text-sm">
           {NAV.map((item) => {
-            const active =
-              item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+            const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
             return (
               <Link
                 key={item.href}

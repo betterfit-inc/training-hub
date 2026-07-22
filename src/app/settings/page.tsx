@@ -1,18 +1,7 @@
-import {
-  CableIcon,
-  CheckCircle2Icon,
-  CircleAlertIcon,
-  KeyRoundIcon,
-} from "lucide-react";
+import { CableIcon, CheckCircle2Icon, CircleAlertIcon, KeyRoundIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { SyncButton } from "@/components/sync-button";
 import {
   BikeMatcher,
@@ -46,9 +35,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
 
   const justConnected = params.connected === "1";
   const errorKey = typeof params.error === "string" ? params.error : null;
-  const errorMessage = errorKey
-    ? t.settingsPage.errors[errorKey] ?? t.errors.generic
-    : null;
+  const errorMessage = errorKey ? (t.settingsPage.errors[errorKey] ?? t.errors.generic) : null;
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
@@ -223,9 +210,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
                 />
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  {bikeGear === null
-                    ? t.settingsPage.gearLoadFailed
-                    : t.settingsPage.gearScopeHint}
+                  {bikeGear === null ? t.settingsPage.gearLoadFailed : t.settingsPage.gearScopeHint}
                 </p>
               )}
             </CardContent>

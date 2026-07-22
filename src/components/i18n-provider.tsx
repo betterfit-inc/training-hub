@@ -8,17 +8,9 @@ const I18nContext = createContext<{ lang: Lang; t: Dict }>({
   t: dictionaries.en,
 });
 
-export function I18nProvider({
-  lang,
-  children,
-}: {
-  lang: Lang;
-  children: React.ReactNode;
-}) {
+export function I18nProvider({ lang, children }: { lang: Lang; children: React.ReactNode }) {
   return (
-    <I18nContext.Provider value={{ lang, t: dictionaries[lang] }}>
-      {children}
-    </I18nContext.Provider>
+    <I18nContext.Provider value={{ lang, t: dictionaries[lang] }}>{children}</I18nContext.Provider>
   );
 }
 

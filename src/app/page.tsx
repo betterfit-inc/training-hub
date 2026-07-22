@@ -82,15 +82,7 @@ function weekSummary(week: WeekGroup, t: Dict): string {
   return parts.join(" · ") || `${week.items.length} ${t.words.activities}`;
 }
 
-function ActivityRow({
-  activity,
-  lang,
-  t,
-}: {
-  activity: ActivityWithSplits;
-  lang: Lang;
-  t: Dict;
-}) {
+function ActivityRow({ activity, lang, t }: { activity: ActivityWithSplits; lang: Lang; t: Dict }) {
   const run = isRunSport(activity.sport_type);
   const ride = isRideSport(activity.sport_type);
   const metrics = ride ? rideMetrics(activity) : null;
@@ -208,7 +200,7 @@ export default async function TrainingLogPage({ searchParams }: PageProps<"/">) 
   const availableCategories = SPORT_CATEGORIES.filter((c) => (counts.get(c.key) ?? 0) > 0);
   const filterLabel = filter === "all" ? null : t.sports[filter].toLowerCase();
   const oldest = visible[visible.length - 1];
-  const oldestDate = oldest ? oldest.started_at ?? oldest.created_at : null;
+  const oldestDate = oldest ? (oldest.started_at ?? oldest.created_at) : null;
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">

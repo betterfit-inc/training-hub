@@ -6,12 +6,7 @@ import { useRouter } from "next/navigation";
 import { ClockIcon, Loader2Icon, PencilIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import {
-  SplitsEditor,
-  newRowKey,
-  rowsToSplits,
-  type SplitRow,
-} from "@/components/splits-editor";
+import { SplitsEditor, newRowKey, rowsToSplits, type SplitRow } from "@/components/splits-editor";
 import { useI18n } from "@/components/i18n-provider";
 import { updateSplitsAction } from "@/lib/actions";
 import { fmtKm } from "@/lib/format";

@@ -69,7 +69,7 @@ export default async function BikesPage() {
                 bike={bike}
                 gearOptions={gear}
                 gearName={
-                  bike.strava_gear_id ? gearNameById.get(bike.strava_gear_id) ?? null : null
+                  bike.strava_gear_id ? (gearNameById.get(bike.strava_gear_id) ?? null) : null
                 }
                 connected={connected}
                 t={t}
@@ -89,7 +89,7 @@ export default async function BikesPage() {
                     bike={bike}
                     gearOptions={gear}
                     gearName={
-                      bike.strava_gear_id ? gearNameById.get(bike.strava_gear_id) ?? null : null
+                      bike.strava_gear_id ? (gearNameById.get(bike.strava_gear_id) ?? null) : null
                     }
                     connected={connected}
                     t={t}

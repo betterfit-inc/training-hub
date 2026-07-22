@@ -8,14 +8,7 @@ import { cn } from "@/lib/utils";
 import { fillStr, type Dict, type Lang } from "@/lib/i18n";
 import type { BlockSummary, RaceAnalysis } from "@/lib/blocks";
 import { RACE_CATEGORY_ORDER, type RaceCategory } from "@/lib/races";
-import {
-  fmtDateWithYear,
-  fmtDuration,
-  fmtHoursMin,
-  fmtHr,
-  fmtKm,
-  fmtPace,
-} from "@/lib/format";
+import { fmtDateWithYear, fmtDuration, fmtHoursMin, fmtHr, fmtKm, fmtPace } from "@/lib/format";
 
 export interface RaceOption {
   id: number;
@@ -543,11 +536,19 @@ export function RaceCompare({
       <div className="space-y-6">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm font-medium">
           <span className="inline-flex items-center gap-1.5">
-            <span className="size-2.5 rounded-full" style={{ backgroundColor: COLOR_A }} aria-hidden />
+            <span
+              className="size-2.5 rounded-full"
+              style={{ backgroundColor: COLOR_A }}
+              aria-hidden
+            />
             {sideA.race.name ?? t.compare.raceA}
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <span className="size-2.5 rounded-full" style={{ backgroundColor: COLOR_B }} aria-hidden />
+            <span
+              className="size-2.5 rounded-full"
+              style={{ backgroundColor: COLOR_B }}
+              aria-hidden
+            />
             {sideB.race.name ?? t.compare.raceB}
           </span>
         </div>
@@ -601,7 +602,9 @@ export function RaceCompare({
                         style={{ backgroundColor: COLOR_A }}
                         aria-hidden
                       />
-                      <span className="max-w-32 truncate">{sideA.race.name ?? t.compare.raceA}</span>
+                      <span className="max-w-32 truncate">
+                        {sideA.race.name ?? t.compare.raceA}
+                      </span>
                     </span>
                   </th>
                   <th className="py-1.5 pl-2 text-right text-[11px] font-medium tracking-wider uppercase">
@@ -611,7 +614,9 @@ export function RaceCompare({
                         style={{ backgroundColor: COLOR_B }}
                         aria-hidden
                       />
-                      <span className="max-w-32 truncate">{sideB.race.name ?? t.compare.raceB}</span>
+                      <span className="max-w-32 truncate">
+                        {sideB.race.name ?? t.compare.raceB}
+                      </span>
                     </span>
                   </th>
                 </tr>

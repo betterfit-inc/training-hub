@@ -151,9 +151,7 @@ function SummaryTile({ label, value, sub }: { label: string; value: string; sub?
       </div>
       <div className="mt-1 font-display text-3xl font-bold">
         {value}
-        {sub ? (
-          <span className="ml-1 text-sm font-normal text-muted-foreground">{sub}</span>
-        ) : null}
+        {sub ? <span className="ml-1 text-sm font-normal text-muted-foreground">{sub}</span> : null}
       </div>
     </div>
   );
@@ -218,8 +216,7 @@ export default async function InsightsPage({ searchParams }: PageProps<"/insight
                     />
                     <h2 className="text-sm font-medium">{t.sports[stats.category]}</h2>
                     <span className="ml-auto font-mono text-xs tabular-nums text-muted-foreground">
-                      {stats.sessions}{" "}
-                      {stats.sessions === 1 ? t.words.session : t.words.sessions}
+                      {stats.sessions} {stats.sessions === 1 ? t.words.session : t.words.sessions}
                     </span>
                   </div>
                   <p className="text-[16px] leading-relaxed text-muted-foreground italic">

@@ -1,0 +1,12 @@
+node_modules
+.next
+out
+build
+coverage
+data
+scratchpad
+public
+package-lock.json
+next-env.d.ts
+tsconfig.tsbuildinfo
+*.md

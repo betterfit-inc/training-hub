@@ -82,7 +82,11 @@ export function computeLoad(
     const power = metrics.normalizedPower ?? metrics.avgPower;
     if (power != null && power > 0) {
       const intensity = clamp(power / thresholds.ftpW, 0, IF_CLAMP_POWER);
-      return { tss: round1(tssFrom(time, intensity)), method: "power", intensityFactor: round3(intensity) };
+      return {
+        tss: round1(tssFrom(time, intensity)),
+        method: "power",
+        intensityFactor: round3(intensity),
+      };
     }
   }
 
@@ -90,7 +94,11 @@ export function computeLoad(
   const pace = activity.avg_pace_s_per_km ?? 0;
   if (isRunSport(activity.sport_type) && pace > 0 && thresholds.thresholdPaceSPerKm > 0) {
     const intensity = clamp(thresholds.thresholdPaceSPerKm / pace, 0, IF_CLAMP_PACE);
-    return { tss: round1(tssFrom(time, intensity)), method: "pace", intensityFactor: round3(intensity) };
+    return {
+      tss: round1(tssFrom(time, intensity)),
+      method: "pace",
+      intensityFactor: round3(intensity),
+    };
   }
 
   // 3. Heart rate (hrTSS, works for any sport with an average HR).
@@ -101,7 +109,11 @@ export function computeLoad(
       0,
       IF_CLAMP_HR
     );
-    return { tss: round1(tssFrom(time, intensity)), method: "hr", intensityFactor: round3(intensity) };
+    return {
+      tss: round1(tssFrom(time, intensity)),
+      method: "hr",
+      intensityFactor: round3(intensity),
+    };
   }
 
   // 4. RPE (subjective fallback; RPE 10 for 60 min ≈ 150 TSS).
@@ -195,7 +207,9 @@ export function hrZones(thresholds: AthleteThresholds): Zone[] {
  * faster (higher) zones carry the smaller pace numbers. Bounds are s/km.
  */
 export function paceZones(thresholds: AthleteThresholds): Zone[] {
-  const [p1, p2, p3, p4] = ZONE_FRACTIONS.map((f) => Math.round(thresholds.thresholdPaceSPerKm / f));
+  const [p1, p2, p3, p4] = ZONE_FRACTIONS.map((f) =>
+    Math.round(thresholds.thresholdPaceSPerKm / f)
+  );
   return [
     { zone: 1, min: p1, max: null },
     { zone: 2, min: p2, max: p1 },

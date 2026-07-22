@@ -24,22 +24,9 @@ import { EmptyState } from "@/components/empty-state";
 import { FeelingControl, RpeControl } from "@/components/journal-controls";
 import { SportIcon } from "@/components/sport-icon";
 import { useI18n } from "@/components/i18n-provider";
-import {
-  SplitsEditor,
-  newRowKey,
-  rowsToSplits,
-  type SplitRow,
-} from "@/components/splits-editor";
+import { SplitsEditor, newRowKey, rowsToSplits, type SplitRow } from "@/components/splits-editor";
 import { confirmActivityAction } from "@/lib/actions";
-import {
-  fmtDate,
-  fmtDuration,
-  fmtElev,
-  fmtHr,
-  fmtKm,
-  fmtPace,
-  fmtTime,
-} from "@/lib/format";
+import { fmtDate, fmtDuration, fmtElev, fmtHr, fmtKm, fmtPace, fmtTime } from "@/lib/format";
 import { fill, fillStr, splitErrorText } from "@/lib/i18n";
 import { isRunSport, validateSplits } from "@/lib/validate";
 import { BikeSelect } from "@/components/bike-select";
@@ -67,11 +54,7 @@ function initForm(activity: ActivityWithSplits): FormState {
     shoeId: s.shoe_id,
     km: s.km ? String(s.km) : "",
   }));
-  if (
-    rows.length === 0 &&
-    isRunSport(activity.sport_type) &&
-    (activity.distance_km ?? 0) > 0
-  ) {
+  if (rows.length === 0 && isRunSport(activity.sport_type) && (activity.distance_km ?? 0) > 0) {
     rows.push({ key: newRowKey(), shoeId: null, km: String(activity.distance_km) });
   }
   return {
@@ -117,7 +100,7 @@ export function ReviewFlow({
   const sessionTotal = summary.count + queue.length;
   const current = queue[index] ?? null;
   const form = useMemo(
-    () => (current ? forms[current.id] ?? initForm(current) : null),
+    () => (current ? (forms[current.id] ?? initForm(current)) : null),
     [current, forms]
   );
 
@@ -234,9 +217,7 @@ export function ReviewFlow({
         {summary.count > 0 ? (
           <div className="flex flex-col items-center rounded-xl border bg-card px-6 py-14 text-center">
             <CheckCircle2Icon className="size-10 text-positive" aria-hidden />
-            <h2 className="mt-4 font-display text-3xl font-bold uppercase">
-              {t.review.caughtUp}
-            </h2>
+            <h2 className="mt-4 font-display text-3xl font-bold uppercase">{t.review.caughtUp}</h2>
             <p className="mt-2 text-sm text-muted-foreground">
               {fillStr(t.review.confirmedSummary, {
                 n: summary.count,
@@ -366,10 +347,7 @@ export function ReviewFlow({
           </div>
 
           <div className="grid grid-cols-3 gap-x-4 gap-y-3 sm:grid-cols-5">
-            <Stat
-              label={t.review.distance}
-              value={fmtKm(distance, distance >= 100 ? 0 : 2)}
-            />
+            <Stat label={t.review.distance} value={fmtKm(distance, distance >= 100 ? 0 : 2)} />
             {run ? <Stat label={t.review.pace} value={fmtPace(current.avg_pace_s_per_km)} /> : null}
             <Stat label={t.review.time} value={fmtDuration(current.moving_time_s)} />
             <Stat label={t.review.heartRate} value={fmtHr(current.avg_hr)} />
@@ -426,10 +404,7 @@ export function ReviewFlow({
               <Label className="text-xs tracking-wider text-muted-foreground uppercase">
                 {t.review.feeling}
               </Label>
-              <FeelingControl
-                value={form.feeling}
-                onChange={(feeling) => patchForm({ feeling })}
-              />
+              <FeelingControl value={form.feeling} onChange={(feeling) => patchForm({ feeling })} />
             </div>
           </div>
 

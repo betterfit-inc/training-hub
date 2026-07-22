@@ -28,23 +28,8 @@ import {
   type StravaLap,
   type StravaSplit,
 } from "@/lib/strava";
-import {
-  fmtCadence,
-  fmtEnergy,
-  fmtPower,
-  fmtSpeed,
-  isRideSport,
-  rideMetrics,
-} from "@/lib/cycling";
-import {
-  fmtDateLong,
-  fmtDuration,
-  fmtElev,
-  fmtHr,
-  fmtKm,
-  fmtPace,
-  fmtTime,
-} from "@/lib/format";
+import { fmtCadence, fmtEnergy, fmtPower, fmtSpeed, isRideSport, rideMetrics } from "@/lib/cycling";
+import { fmtDateLong, fmtDuration, fmtElev, fmtHr, fmtKm, fmtPace, fmtTime } from "@/lib/format";
 import type { Dict } from "@/lib/i18n";
 import { isRunSport } from "@/lib/validate";
 import type { BikeOption, ShoeOption } from "@/lib/types";
@@ -77,7 +62,8 @@ function fmtLapDist(distanceM?: number): string {
   return fmtKm(distanceM / 1000, distanceM < 99500 ? 2 : 1);
 }
 
-const TH = "px-2 py-1.5 text-left text-[11px] font-medium tracking-wider text-muted-foreground uppercase";
+const TH =
+  "px-2 py-1.5 text-left text-[11px] font-medium tracking-wider text-muted-foreground uppercase";
 const TD = "px-2 py-1.5 font-mono text-sm tabular-nums whitespace-nowrap";
 
 function LapsTable({ laps, t, ride }: { laps: StravaLap[]; t: Dict; ride: boolean }) {
@@ -152,7 +138,7 @@ function KmSplitsTable({ splits, t }: { splits: StravaSplit[]; t: Dict }) {
             return (
               <tr key={index}>
                 <td className={`${TD} text-muted-foreground`}>
-                  {partial ? ((split.distance ?? 0) / 1000).toFixed(1) : split.split ?? index + 1}
+                  {partial ? ((split.distance ?? 0) / 1000).toFixed(1) : (split.split ?? index + 1)}
                 </td>
                 <td className={`${TD} font-medium`}>
                   {Number.isFinite(pace) ? fmtPace(pace) : "–"}
@@ -300,9 +286,7 @@ export default async function ActivityPage({ params }: PageProps<"/activity/[id]
       </header>
 
       {description ? (
-        <p className="mt-3 text-sm leading-relaxed text-muted-foreground italic">
-          {description}
-        </p>
+        <p className="mt-3 text-sm leading-relaxed text-muted-foreground italic">{description}</p>
       ) : null}
 
       {confirmed ? (

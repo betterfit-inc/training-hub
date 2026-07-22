@@ -20,10 +20,7 @@ const CACHE_HEADERS = {
 };
 
 /** Serves shoe photos: local data/uploads first, then the private Blob store. */
-export async function GET(
-  _request: NextRequest,
-  context: { params: Promise<{ name: string }> }
-) {
+export async function GET(_request: NextRequest, context: { params: Promise<{ name: string }> }) {
   const { name } = await context.params;
   const safeName = path.basename(name);
   const type = CONTENT_TYPES[path.extname(safeName).toLowerCase()];

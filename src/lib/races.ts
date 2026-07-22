@@ -1,21 +1,15 @@
 import type { Activity } from "./types";
 
 export type RaceCategory =
-  | "marathon"
-  | "half"
-  | "30k"
-  | "15k"
-  | "12k"
-  | "10k"
-  | "5k"
-  | "trail"
-  | "other";
+  "marathon" | "half" | "30k" | "15k" | "12k" | "10k" | "5k" | "trail" | "other";
 
 /**
  * Buckets a race by name and distance. Trail is detected by name (the distance
  * varies); road races snap to the nearest standard distance.
  */
-export function raceCategory(activity: Pick<Activity, "name" | "sport_type" | "distance_km">): RaceCategory {
+export function raceCategory(
+  activity: Pick<Activity, "name" | "sport_type" | "distance_km">
+): RaceCategory {
   const name = (activity.name ?? "").toLowerCase();
   const sport = (activity.sport_type ?? "").toLowerCase();
   if (name.includes("trail") || sport.includes("trail")) return "trail";

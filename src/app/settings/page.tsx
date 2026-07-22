@@ -131,6 +131,9 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
                 </div>
                 <div className="flex items-center gap-2">
                   <SyncButton connected={connected} />
+                  <Button asChild variant="outline" size="sm">
+                    <a href="/api/strava/connect">{t.settingsPage.reconnect}</a>
+                  </Button>
                   <DisconnectButton />
                 </div>
               </div>
@@ -181,7 +184,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
                 />
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  {gear === null ? t.settingsPage.gearLoadFailed : t.settingsPage.noStravaShoes}
+                  {gear === null ? t.settingsPage.gearLoadFailed : t.settingsPage.gearScopeHint}
                 </p>
               )}
             </CardContent>
@@ -210,7 +213,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
                 <p className="text-sm text-muted-foreground">
                   {bikeGear === null
                     ? t.settingsPage.gearLoadFailed
-                    : t.settingsPage.noStravaBikes}
+                    : t.settingsPage.gearScopeHint}
                 </p>
               )}
             </CardContent>

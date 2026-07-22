@@ -42,7 +42,9 @@ export function buildAuthorizeUrl(origin: string, state: string): string {
   url.searchParams.set("response_type", "code");
   url.searchParams.set("redirect_uri", `${origin}/api/strava/callback`);
   url.searchParams.set("approval_prompt", "auto");
-  url.searchParams.set("scope", "activity:read_all");
+  // profile:read_all is required for the athlete endpoint to return gear
+  // (shoes + bikes); activity:read_all alone omits them.
+  url.searchParams.set("scope", "activity:read_all,profile:read_all");
   url.searchParams.set("state", state);
   return url.toString();
 }

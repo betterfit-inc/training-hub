@@ -140,6 +140,19 @@
   ::selection {
     background: color-mix(in oklch, var(--primary) 20%, transparent);
   }
+  /* Interactive elements get a pointer and a subtle press response. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="radio"]:not(:disabled),
+  summary,
+  a[href],
+  label[for] {
+    cursor: pointer;
+  }
+  button:not(:disabled):active,
+  [role="radio"]:not(:disabled):active {
+    transform: translateY(0.5px);
+  }
 }
 
 @layer components {

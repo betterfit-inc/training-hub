@@ -107,7 +107,7 @@ function ActivityRow({
     <li>
       <Link
         href={`/activity/${activity.id}`}
-        className="group -mx-2 grid grid-cols-[74px_minmax(0,1fr)_auto] items-center gap-x-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-accent/50 lg:grid-cols-[74px_minmax(0,1.35fr)_minmax(0,1fr)_minmax(0,1fr)_92px_minmax(0,0.85fr)]"
+        className="group/row -mx-2 grid grid-cols-[74px_minmax(0,1fr)_auto] items-center gap-x-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-accent/50 lg:grid-cols-[74px_minmax(0,1.35fr)_minmax(0,1fr)_minmax(0,1fr)_92px_minmax(0,0.85fr)]"
       >
         <span className="font-mono text-xs whitespace-nowrap tabular-nums text-muted-foreground">
           {fmtDate(activity.started_at, lang)}
@@ -119,7 +119,7 @@ function ActivityRow({
             {activity.is_race === 1 ? (
               <MedalIcon className="size-3.5 shrink-0 text-primary" aria-label={t.detail.race} />
             ) : null}
-            <span className="truncate text-sm font-medium transition-colors group-hover:text-primary">
+            <span className="truncate text-sm font-medium transition-colors group-hover/row:text-primary">
               {activity.name ?? t.log.untitled}
             </span>
           </span>

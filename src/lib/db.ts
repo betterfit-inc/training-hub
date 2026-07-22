@@ -531,6 +531,13 @@ export async function getActivity(id: number): Promise<ActivityWithSplits | null
   return withSplits;
 }
 
+export async function listRaces(): Promise<ActivityWithSplits[]> {
+  const activities = await many<Activity>(
+    `${ACTIVITY_SELECT} WHERE a.is_race = 1 ORDER BY a.started_at DESC, a.id DESC`
+  );
+  return attachSplits(activities);
+}
+
 export async function activityExistsByStravaId(stravaId: number): Promise<boolean> {
   return (await one("SELECT 1 AS x FROM activities WHERE strava_id = ?", [stravaId])) !== null;
 }

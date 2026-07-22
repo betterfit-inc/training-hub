@@ -4,6 +4,7 @@ import { createClient, type Client, type InStatement } from "@libsql/client";
 import type {
   Activity,
   ActivityWithSplits,
+  BikeWithMileage,
   Feeling,
   ShoeWithMileage,
   SplitInput,
@@ -76,6 +77,16 @@ const SCHEMA: string[] = [
     km REAL NOT NULL,
     note TEXT
   )`,
+  `CREATE TABLE IF NOT EXISTS bikes (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    role TEXT,
+    strava_gear_id TEXT UNIQUE,
+    photo_path TEXT,
+    initial_km REAL NOT NULL DEFAULT 0,
+    retired_at TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`,
   `CREATE TABLE IF NOT EXISTS strava_auth (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     access_token TEXT,
@@ -90,6 +101,13 @@ const SCHEMA: string[] = [
   "CREATE INDEX IF NOT EXISTS idx_activities_status ON activities(status)",
   "CREATE INDEX IF NOT EXISTS idx_splits_activity_id ON activity_splits(activity_id)",
   "CREATE INDEX IF NOT EXISTS idx_splits_shoe_id ON activity_splits(shoe_id)",
+];
+
+// Real bikes. Baselines start at zero; link each to Strava gear in Settings and
+// set its baseline km from the Strava odometer if you want the historical total.
+const BASELINE_BIKES: Array<{ name: string; role: string; photo: string }> = [
+  { name: "TSW TR10 One", role: "road", photo: "bike-tsw-tr10-one.png" },
+  { name: "TSW Stamina", role: "mountain bike", photo: "bike-tsw-stamina.png" },
 ];
 
 // Real shoes with corrected current mileage (includes the 18 km moved from the
@@ -116,6 +134,14 @@ async function migrate(): Promise<void> {
   if (!names.has("detail_synced_at")) {
     await client.execute("ALTER TABLE activities ADD COLUMN detail_synced_at TEXT");
   }
+  // Migration 004: bikes as gear, one bike per activity (no splits). The index
+  // is created after the column exists (the activities table predates it).
+  if (!names.has("bike_id")) {
+    await client.execute("ALTER TABLE activities ADD COLUMN bike_id INTEGER REFERENCES bikes(id)");
+  }
+  await client.execute(
+    "CREATE INDEX IF NOT EXISTS idx_activities_bike_id ON activities(bike_id)"
+  );
 
   // Migration 002: baseline shoes + baseline date, only on an empty database.
   // The write transaction serializes concurrent cold starts.
@@ -127,6 +153,15 @@ async function migrate(): Promise<void> {
         await tx.execute({
           sql: "INSERT INTO shoes (name, role, initial_km) VALUES (?, ?, ?)",
           args: [shoe.name, shoe.role, shoe.initial_km],
+        });
+      }
+    }
+    const bikes = await tx.execute("SELECT COUNT(*) AS c FROM bikes");
+    if (Number(bikes.rows[0].c) === 0) {
+      for (const bike of BASELINE_BIKES) {
+        await tx.execute({
+          sql: "INSERT INTO bikes (name, role, photo_path) VALUES (?, ?, ?)",
+          args: [bike.name, bike.role, bike.photo],
         });
       }
     }
@@ -310,6 +345,113 @@ export async function findShoeIdByGear(gearId: string): Promise<number | null> {
 }
 
 // ---------------------------------------------------------------------------
+// Bikes (one whole activity per bike, no splits; indoor = VirtualRide)
+// ---------------------------------------------------------------------------
+
+const BIKE_MILEAGE = `
+  SELECT COALESCE(SUM(a.distance_km), 0) AS total,
+    COALESCE(SUM(CASE WHEN a.sport_type = 'VirtualRide' THEN a.distance_km ELSE 0 END), 0) AS indoor,
+    COALESCE(SUM(CASE WHEN a.sport_type != 'VirtualRide' THEN a.distance_km ELSE 0 END), 0) AS outdoor,
+    COUNT(*) AS rides
+  FROM activities a
+  WHERE a.bike_id = b.id AND a.status = 'confirmed'
+`;
+
+const BIKE_SELECT = `
+SELECT b.*,
+  b.initial_km + (SELECT total FROM (${BIKE_MILEAGE})) AS current_km,
+  (SELECT indoor FROM (${BIKE_MILEAGE})) AS indoor_km,
+  (SELECT outdoor FROM (${BIKE_MILEAGE})) AS outdoor_km,
+  (SELECT rides FROM (${BIKE_MILEAGE})) AS ride_count
+FROM bikes b
+`;
+
+export async function listBikes(): Promise<BikeWithMileage[]> {
+  return many<BikeWithMileage>(
+    `${BIKE_SELECT} ORDER BY (b.retired_at IS NOT NULL), b.name COLLATE NOCASE`
+  );
+}
+
+export async function getBike(id: number): Promise<BikeWithMileage | null> {
+  return one<BikeWithMileage>(`${BIKE_SELECT} WHERE b.id = ?`, [id]);
+}
+
+export interface BikeFields {
+  name: string;
+  role: string | null;
+  initial_km: number;
+  strava_gear_id: string | null;
+}
+
+export async function createBike(fields: BikeFields, photoPath: string | null): Promise<number> {
+  const statements: InStatement[] = [];
+  if (fields.strava_gear_id) {
+    statements.push({
+      sql: "UPDATE bikes SET strava_gear_id = NULL WHERE strava_gear_id = ?",
+      args: [fields.strava_gear_id],
+    });
+  }
+  statements.push({
+    sql: `INSERT INTO bikes (name, role, initial_km, strava_gear_id, photo_path)
+          VALUES (?, ?, ?, ?, ?)`,
+    args: [fields.name, fields.role, fields.initial_km, fields.strava_gear_id, photoPath],
+  });
+  const results = await batchWrite(statements);
+  return Number(results[results.length - 1].lastInsertRowid);
+}
+
+export async function updateBike(
+  id: number,
+  fields: BikeFields,
+  photoPath: string | null
+): Promise<void> {
+  const statements: InStatement[] = [];
+  if (fields.strava_gear_id) {
+    statements.push({
+      sql: "UPDATE bikes SET strava_gear_id = NULL WHERE strava_gear_id = ? AND id != ?",
+      args: [fields.strava_gear_id, id],
+    });
+  }
+  statements.push({
+    sql: `UPDATE bikes SET name = ?, role = ?, initial_km = ?, strava_gear_id = ?,
+          photo_path = COALESCE(?, photo_path) WHERE id = ?`,
+    args: [fields.name, fields.role, fields.initial_km, fields.strava_gear_id, photoPath, id],
+  });
+  await batchWrite(statements);
+}
+
+export async function setBikeRetired(id: number, retired: boolean): Promise<void> {
+  await exec("UPDATE bikes SET retired_at = ? WHERE id = ?", [
+    retired ? new Date().toISOString() : null,
+    id,
+  ]);
+}
+
+export async function setBikeGear(id: number, gearId: string | null): Promise<void> {
+  const statements: InStatement[] = [];
+  if (gearId) {
+    statements.push({
+      sql: "UPDATE bikes SET strava_gear_id = NULL WHERE strava_gear_id = ? AND id != ?",
+      args: [gearId, id],
+    });
+  }
+  statements.push({
+    sql: "UPDATE bikes SET strava_gear_id = ? WHERE id = ?",
+    args: [gearId, id],
+  });
+  await batchWrite(statements);
+}
+
+export async function findBikeIdByGear(gearId: string): Promise<number | null> {
+  const row = await one<{ id: number }>("SELECT id FROM bikes WHERE strava_gear_id = ?", [gearId]);
+  return row?.id ?? null;
+}
+
+export async function setActivityBike(activityId: number, bikeId: number | null): Promise<void> {
+  await exec("UPDATE activities SET bike_id = ? WHERE id = ?", [bikeId, activityId]);
+}
+
+// ---------------------------------------------------------------------------
 // Activities
 // ---------------------------------------------------------------------------
 
@@ -331,16 +473,19 @@ async function attachSplits(activities: Activity[]): Promise<ActivityWithSplits[
   return activities.map((a) => ({ ...a, splits: byActivity.get(a.id) ?? [] }));
 }
 
+const ACTIVITY_SELECT =
+  "SELECT a.*, b.name AS bike_name FROM activities a LEFT JOIN bikes b ON b.id = a.bike_id";
+
 export async function listConfirmedActivities(): Promise<ActivityWithSplits[]> {
   const activities = await many<Activity>(
-    "SELECT * FROM activities WHERE status = 'confirmed' ORDER BY started_at DESC, id DESC"
+    `${ACTIVITY_SELECT} WHERE a.status = 'confirmed' ORDER BY a.started_at DESC, a.id DESC`
   );
   return attachSplits(activities);
 }
 
 export async function listPendingActivities(): Promise<ActivityWithSplits[]> {
   const activities = await many<Activity>(
-    "SELECT * FROM activities WHERE status = 'pending_review' ORDER BY started_at ASC, id ASC"
+    `${ACTIVITY_SELECT} WHERE a.status = 'pending_review' ORDER BY a.started_at ASC, a.id ASC`
   );
   return attachSplits(activities);
 }
@@ -353,7 +498,7 @@ export async function countPending(): Promise<number> {
 }
 
 export async function getActivity(id: number): Promise<ActivityWithSplits | null> {
-  const activity = await one<Activity>("SELECT * FROM activities WHERE id = ?", [id]);
+  const activity = await one<Activity>(`${ACTIVITY_SELECT} WHERE a.id = ?`, [id]);
   if (!activity) return null;
   const [withSplits] = await attachSplits([activity]);
   return withSplits;
@@ -385,6 +530,7 @@ export interface SyncedActivityInput {
   elevation_gain_m: number | null;
   status: "pending_review" | "confirmed";
   raw_json: string;
+  bike_id: number | null;
 }
 
 const INSERT_SPLIT_SQL =
@@ -400,8 +546,8 @@ export async function insertSyncedActivity(
     const result = await tx.execute({
       sql: `INSERT INTO activities
             (strava_id, name, sport_type, started_at, distance_km, moving_time_s,
-             avg_pace_s_per_km, avg_hr, elevation_gain_m, status, raw_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             avg_pace_s_per_km, avg_hr, elevation_gain_m, status, raw_json, bike_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         input.strava_id,
         input.name,
@@ -414,6 +560,7 @@ export async function insertSyncedActivity(
         input.elevation_gain_m,
         input.status,
         input.raw_json,
+        input.bike_id,
       ],
     });
     const activityId = Number(result.lastInsertRowid);
@@ -436,13 +583,21 @@ export interface JournalFields {
 export async function confirmActivity(
   id: number,
   journal: JournalFields,
-  splits: SplitInput[]
+  splits: SplitInput[],
+  bikeId: number | null
 ): Promise<void> {
   await batchWrite([
     {
       sql: `UPDATE activities SET status = 'confirmed', rpe = ?, feeling = ?,
-            workout_notes = ?, health_notes = ? WHERE id = ?`,
-      args: [journal.rpe, journal.feeling, journal.workout_notes, journal.health_notes, id],
+            workout_notes = ?, health_notes = ?, bike_id = ? WHERE id = ?`,
+      args: [
+        journal.rpe,
+        journal.feeling,
+        journal.workout_notes,
+        journal.health_notes,
+        bikeId,
+        id,
+      ],
     },
     { sql: "DELETE FROM activity_splits WHERE activity_id = ?", args: [id] },
     ...splits.map((split) => ({

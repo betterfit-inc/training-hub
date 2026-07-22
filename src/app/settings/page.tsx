@@ -15,13 +15,14 @@ import {
 } from "@/components/ui/card";
 import { SyncButton } from "@/components/sync-button";
 import {
+  BikeMatcher,
   DisconnectButton,
   GearMatcher,
   ManualActivityForm,
 } from "@/components/settings-forms";
-import { getMeta, listShoes } from "@/lib/db";
+import { getMeta, listBikes, listShoes } from "@/lib/db";
 import { getDict } from "@/lib/lang";
-import { isStravaConnected, stravaConfigured, tryFetchGear } from "@/lib/strava";
+import { isStravaConnected, stravaConfigured, tryFetchAllGear } from "@/lib/strava";
 import { fmtDate, fmtDateLong, fmtTime } from "@/lib/format";
 import { fillStr } from "@/lib/i18n";
 
@@ -35,8 +36,11 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
   const athleteName = await getMeta("athlete_name");
   const lastSync = await getMeta("last_sync_at");
   const baselineDate = await getMeta("baseline_date");
-  const gear = connected ? await tryFetchGear() : null;
+  const allGear = connected ? await tryFetchAllGear() : null;
+  const gear = allGear?.shoes ?? null;
+  const bikeGear = allGear?.bikes ?? null;
   const shoes = await listShoes();
+  const bikes = await listBikes();
 
   const justConnected = params.connected === "1";
   const errorKey = typeof params.error === "string" ? params.error : null;
@@ -178,6 +182,35 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
               ) : (
                 <p className="text-sm text-muted-foreground">
                   {gear === null ? t.settingsPage.gearLoadFailed : t.settingsPage.noStravaShoes}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {connected ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>{t.settingsPage.bikeMatching}</CardTitle>
+              <CardDescription>{t.settingsPage.bikeMatchingBody}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {bikeGear && bikeGear.length > 0 ? (
+                <BikeMatcher
+                  bikes={bikes.map((b) => ({
+                    id: b.id,
+                    name: b.name,
+                    role: b.role,
+                    retired: !!b.retired_at,
+                    gearId: b.strava_gear_id,
+                  }))}
+                  gear={bikeGear}
+                />
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  {bikeGear === null
+                    ? t.settingsPage.gearLoadFailed
+                    : t.settingsPage.noStravaBikes}
                 </p>
               )}
             </CardContent>

@@ -42,10 +42,13 @@ import {
 } from "@/lib/format";
 import { fill, fillStr, splitErrorText } from "@/lib/i18n";
 import { isRunSport, validateSplits } from "@/lib/validate";
-import type { ActivityWithSplits, Feeling, ShoeOption } from "@/lib/types";
+import { BikeSelect } from "@/components/bike-select";
+import { isRideSport } from "@/lib/cycling";
+import type { ActivityWithSplits, BikeOption, Feeling, ShoeOption } from "@/lib/types";
 
 interface FormState {
   rows: SplitRow[];
+  bikeId: number | null;
   rpe: number | null;
   feeling: Feeling | null;
   workoutNotes: string;
@@ -73,6 +76,7 @@ function initForm(activity: ActivityWithSplits): FormState {
   }
   return {
     rows,
+    bikeId: activity.bike_id,
     rpe: activity.rpe,
     feeling: activity.feeling,
     workoutNotes: activity.workout_notes ?? "",
@@ -94,9 +98,11 @@ function Stat({ label, value }: { label: string; value: string }) {
 export function ReviewFlow({
   items: serverItems,
   shoes,
+  bikes,
 }: {
   items: ActivityWithSplits[];
   shoes: ShoeOption[];
+  bikes: BikeOption[];
 }) {
   const router = useRouter();
   const { lang, t } = useI18n();
@@ -143,6 +149,7 @@ export function ReviewFlow({
       const result = await confirmActivityAction({
         activityId: activity.id,
         splits: payload,
+        bikeId: form.bikeId,
         rpe: form.rpe,
         feeling: form.feeling,
         workoutNotes: form.workoutNotes,
@@ -289,6 +296,7 @@ export function ReviewFlow({
   // Review card
   // ------------------------------------------------------------------
   const run = isRunSport(current.sport_type);
+  const ride = isRideSport(current.sport_type);
   const distance = current.distance_km ?? 0;
   const hadUnmatchedShoe = run && current.splits.some((s) => s.shoe_id === null);
   const activeShoes = shoes.filter((s) => !s.retired);
@@ -370,27 +378,40 @@ export function ReviewFlow({
 
           <Separator />
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
+          {ride ? (
+            <div className="space-y-2">
               <Label className="text-xs tracking-wider text-muted-foreground uppercase">
-                {run ? t.review.shoes : t.review.shoesOptional}
+                {t.detail.bike}
               </Label>
-              {hadUnmatchedShoe ? (
-                <span className="inline-flex items-center gap-1 text-xs text-wear-worn">
-                  <TriangleAlertIcon className="size-3.5" aria-hidden />
-                  {t.review.noGearMatch}
-                </span>
-              ) : null}
+              <BikeSelect
+                value={form.bikeId}
+                onChange={(bikeId) => patchForm({ bikeId })}
+                bikes={bikes}
+              />
             </div>
-            <SplitsEditor
-              rows={form.rows}
-              onChange={(rows) => patchForm({ rows })}
-              distanceKm={distance}
-              isRun={run}
-              shoes={shoes}
-              firstKmInputRef={kmInputRef}
-            />
-          </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <Label className="text-xs tracking-wider text-muted-foreground uppercase">
+                  {run ? t.review.shoes : t.review.shoesOptional}
+                </Label>
+                {hadUnmatchedShoe ? (
+                  <span className="inline-flex items-center gap-1 text-xs text-wear-worn">
+                    <TriangleAlertIcon className="size-3.5" aria-hidden />
+                    {t.review.noGearMatch}
+                  </span>
+                ) : null}
+              </div>
+              <SplitsEditor
+                rows={form.rows}
+                onChange={(rows) => patchForm({ rows })}
+                distanceKm={distance}
+                isRun={run}
+                shoes={shoes}
+                firstKmInputRef={kmInputRef}
+              />
+            </div>
+          )}
 
           <Separator />
 
@@ -450,7 +471,7 @@ export function ReviewFlow({
               size="lg"
               className="w-full"
               onClick={confirmCurrent}
-              disabled={pending || !!validationMessage || activeShoes.length === 0}
+              disabled={pending || !!validationMessage || (run && activeShoes.length === 0)}
             >
               {pending ? (
                 <Loader2Icon className="animate-spin" />

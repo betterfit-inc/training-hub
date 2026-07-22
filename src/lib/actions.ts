@@ -7,16 +7,23 @@ import { LANG_COOKIE, getLang } from "./lang";
 import { storePhoto } from "./storage";
 import {
   clearStravaAuth,
+  createBike,
   createManualActivity,
   createShoe,
   getActivity,
+  getBike,
   getShoe,
   replaceActivitySplits,
+  setActivityBike,
+  setBikeGear,
+  setBikeRetired,
   setShoeGear,
   setShoeRetired,
   updateActivityJournal,
+  updateBike,
   updateShoe,
   confirmActivity,
+  type BikeFields,
   type JournalFields,
   type ShoeFields,
 } from "./db";
@@ -111,6 +118,7 @@ function normalizeSplits(splits: SplitInput[]): SplitInput[] {
 export async function confirmActivityAction(input: {
   activityId: number;
   splits: SplitInput[];
+  bikeId: number | null;
   rpe: number | null;
   feeling: Feeling | null;
   workoutNotes: string;
@@ -129,7 +137,10 @@ export async function confirmActivityAction(input: {
     const journal = normalizeJournal(input, t);
     if ("error" in journal) return { ok: false, error: journal.error };
 
-    await confirmActivity(input.activityId, journal, splits);
+    const bikeId =
+      input.bikeId != null && (await getBike(input.bikeId)) ? input.bikeId : null;
+
+    await confirmActivity(input.activityId, journal, splits, bikeId);
     refreshAll();
     return { ok: true };
   } catch (error) {
@@ -170,6 +181,23 @@ export async function updateSplitsAction(input: {
     const splitError = validateSplits(activity, splits);
     if (splitError) return { ok: false, error: splitErrorText(splitError, t) };
     await replaceActivitySplits(input.activityId, splits);
+    refreshAll();
+    return { ok: true };
+  } catch (error) {
+    return fail(error, t.errors.generic);
+  }
+}
+
+export async function setActivityBikeAction(
+  activityId: number,
+  bikeId: number | null
+): Promise<ActionResult> {
+  const t = await dict();
+  try {
+    const activity = await getActivity(activityId);
+    if (!activity) return { ok: false, error: t.errors.activityNotFound };
+    const resolved = bikeId != null && (await getBike(bikeId)) ? bikeId : null;
+    await setActivityBike(activityId, resolved);
     refreshAll();
     return { ok: true };
   } catch (error) {
@@ -250,6 +278,81 @@ export async function setShoeGearAction(
   try {
     if (!(await getShoe(shoeId))) return { ok: false, error: t.errors.shoeNotFound };
     await setShoeGear(shoeId, gearId);
+    refreshAll();
+    return { ok: true };
+  } catch (error) {
+    return fail(error, t.errors.generic);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Bikes
+// ---------------------------------------------------------------------------
+
+export async function saveBikeAction(formData: FormData): Promise<ActionResult> {
+  const t = await dict();
+  try {
+    const idRaw = formData.get("id");
+    const id = typeof idRaw === "string" && idRaw ? Number(idRaw) : null;
+
+    const name = String(formData.get("name") ?? "").trim();
+    if (!name) return { ok: false, error: t.errors.bikeNeedsName };
+
+    const role = String(formData.get("role") ?? "").trim() || null;
+    const initialKm = Number(formData.get("initial_km") ?? 0);
+    if (!Number.isFinite(initialKm) || initialKm < 0) {
+      return { ok: false, error: t.errors.invalidBaseline };
+    }
+
+    const gearRaw = String(formData.get("strava_gear_id") ?? "none");
+    const gearId = gearRaw && gearRaw !== "none" ? gearRaw : null;
+
+    let photoPath: string | null = null;
+    const photo = formData.get("photo");
+    if (photo instanceof File && photo.size > 0) {
+      photoPath = await storePhoto(photo);
+    }
+
+    const fields: BikeFields = {
+      name,
+      role,
+      initial_km: Math.round(initialKm * 10) / 10,
+      strava_gear_id: gearId,
+    };
+
+    if (id) {
+      if (!(await getBike(id))) return { ok: false, error: t.errors.bikeNotFound };
+      await updateBike(id, fields, photoPath);
+    } else {
+      await createBike(fields, photoPath);
+    }
+    refreshAll();
+    return { ok: true };
+  } catch (error) {
+    return fail(error, t.errors.generic);
+  }
+}
+
+export async function setBikeRetiredAction(id: number, retired: boolean): Promise<ActionResult> {
+  const t = await dict();
+  try {
+    if (!(await getBike(id))) return { ok: false, error: t.errors.bikeNotFound };
+    await setBikeRetired(id, retired);
+    refreshAll();
+    return { ok: true };
+  } catch (error) {
+    return fail(error, t.errors.generic);
+  }
+}
+
+export async function setBikeGearAction(
+  bikeId: number,
+  gearId: string | null
+): Promise<ActionResult> {
+  const t = await dict();
+  try {
+    if (!(await getBike(bikeId))) return { ok: false, error: t.errors.bikeNotFound };
+    await setBikeGear(bikeId, gearId);
     refreshAll();
     return { ok: true };
   } catch (error) {

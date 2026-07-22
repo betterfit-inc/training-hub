@@ -27,6 +27,7 @@ import {
 } from "@/lib/format";
 import { fillStr, type Dict, type Lang } from "@/lib/i18n";
 import { SPORT_CATEGORIES, sportCategory, type SportCategory } from "@/lib/sports";
+import { fmtPower, fmtSpeed, isRideSport, rideMetrics } from "@/lib/cycling";
 import { isRunSport } from "@/lib/validate";
 import type { ActivityWithSplits } from "@/lib/types";
 
@@ -90,9 +91,13 @@ function ActivityRow({
   t: Dict;
 }) {
   const run = isRunSport(activity.sport_type);
+  const ride = isRideSport(activity.sport_type);
+  const metrics = ride ? rideMetrics(activity) : null;
   const statParts = [
     activity.distance_km ? fmtKm(activity.distance_km) : null,
     run ? fmtPace(activity.avg_pace_s_per_km) : null,
+    metrics ? fmtSpeed(metrics.avgSpeedKmh) : null,
+    metrics && metrics.avgPower != null ? fmtPower(metrics.avgPower) : null,
     activity.moving_time_s ? fmtDuration(activity.moving_time_s) : null,
   ].filter((part) => part && part !== "–");
   const shoeSplits = activity.splits.filter((s) => s.shoe_name);
@@ -138,7 +143,14 @@ function ActivityRow({
         </span>
 
         <span className="hidden min-w-0 flex-wrap items-center gap-1 lg:flex">
-          {shoeSplits.length === 0 ? (
+          {ride && activity.bike_name ? (
+            <span
+              className="max-w-full truncate rounded-full border bg-card px-2 py-0.5 text-[11px] text-muted-foreground"
+              title={activity.bike_name}
+            >
+              {activity.bike_name}
+            </span>
+          ) : shoeSplits.length === 0 ? (
             <span aria-hidden className="text-xs text-muted-foreground/40">
               –
             </span>

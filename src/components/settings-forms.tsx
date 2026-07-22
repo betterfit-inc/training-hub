@@ -18,11 +18,12 @@ import { useI18n } from "@/components/i18n-provider";
 import {
   createManualActivityAction,
   disconnectStravaAction,
+  setBikeGearAction,
   setShoeGearAction,
 } from "@/lib/actions";
 import { fmtKm, localDateInputValue } from "@/lib/format";
 import { fillStr } from "@/lib/i18n";
-import type { ShoeOption, StravaGear } from "@/lib/types";
+import type { BikeOption, ShoeOption, StravaGear } from "@/lib/types";
 
 export function DisconnectButton() {
   const router = useRouter();
@@ -86,6 +87,62 @@ export function GearMatcher({
             ) : null}
           </div>
           <Select value={shoe.gearId ?? "none"} onValueChange={(value) => link(shoe.id, value)}>
+            <SelectTrigger size="sm" className="w-52 shrink-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">{t.settingsPage.notLinked}</SelectItem>
+              {gear.map((g) => (
+                <SelectItem key={g.id} value={g.id}>
+                  <span className="truncate">{g.name}</span>
+                  {g.distance ? (
+                    <span className="text-xs text-muted-foreground">
+                      · {fmtKm(g.distance / 1000, 0)}
+                    </span>
+                  ) : null}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export function BikeMatcher({
+  bikes,
+  gear,
+}: {
+  bikes: Array<BikeOption & { gearId: string | null }>;
+  gear: StravaGear[];
+}) {
+  const router = useRouter();
+  const { t } = useI18n();
+
+  function link(bikeId: number, value: string) {
+    const gearId = value === "none" ? null : value;
+    setBikeGearAction(bikeId, gearId).then((result) => {
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(gearId ? t.toasts.gearLinked : t.toasts.gearUnlinked);
+      router.refresh();
+    });
+  }
+
+  return (
+    <ul className="space-y-2.5">
+      {bikes.map((bike) => (
+        <li key={bike.id} className="flex items-center justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium">{bike.name}</p>
+            {bike.role ? (
+              <p className="truncate text-xs text-muted-foreground italic">{bike.role}</p>
+            ) : null}
+          </div>
+          <Select value={bike.gearId ?? "none"} onValueChange={(value) => link(bike.id, value)}>
             <SelectTrigger size="sm" className="w-52 shrink-0">
               <SelectValue />
             </SelectTrigger>

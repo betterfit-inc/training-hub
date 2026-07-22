@@ -1,6 +1,7 @@
 import {
   activityExistsByStravaId,
   countPending,
+  findBikeIdByGear,
   findShoeIdByGear,
   getMeta,
   getStravaAuth,
@@ -10,6 +11,7 @@ import {
   saveStravaAuth,
   setMeta,
 } from "./db";
+import { isRideSport } from "./cycling";
 import type { Activity } from "./types";
 import { round2 } from "./format";
 import { isRunSport } from "./validate";
@@ -124,16 +126,17 @@ async function apiGet<T>(pathname: string, params?: Record<string, string>): Pro
 }
 
 // ---------------------------------------------------------------------------
-// Gear
+// Gear (shoes + bikes)
 // ---------------------------------------------------------------------------
 
+type RawGear = { id: string; name: string; distance?: number; retired?: boolean };
 interface StravaAthlete {
-  shoes?: Array<{ id: string; name: string; distance?: number; retired?: boolean }>;
+  shoes?: RawGear[];
+  bikes?: RawGear[];
 }
 
-export async function fetchAthleteGear(): Promise<StravaGear[]> {
-  const athlete = await apiGet<StravaAthlete>("/athlete");
-  return (athlete.shoes ?? []).map((g) => ({
+function mapGear(list: RawGear[] | undefined): StravaGear[] {
+  return (list ?? []).map((g) => ({
     id: g.id,
     name: g.name,
     distance: g.distance,
@@ -141,8 +144,36 @@ export async function fetchAthleteGear(): Promise<StravaGear[]> {
   }));
 }
 
-/** Gear list for dropdowns; null when not connected or the request fails. */
+export async function fetchAthleteGear(): Promise<{ shoes: StravaGear[]; bikes: StravaGear[] }> {
+  const athlete = await apiGet<StravaAthlete>("/athlete");
+  return { shoes: mapGear(athlete.shoes), bikes: mapGear(athlete.bikes) };
+}
+
+/** Shoe gear list for dropdowns; null when not connected or the request fails. */
 export async function tryFetchGear(): Promise<StravaGear[] | null> {
+  if (!stravaConfigured() || !(await isStravaConnected())) return null;
+  try {
+    return (await fetchAthleteGear()).shoes;
+  } catch {
+    return null;
+  }
+}
+
+/** Bike gear list for dropdowns; null when not connected or the request fails. */
+export async function tryFetchBikes(): Promise<StravaGear[] | null> {
+  if (!stravaConfigured() || !(await isStravaConnected())) return null;
+  try {
+    return (await fetchAthleteGear()).bikes;
+  } catch {
+    return null;
+  }
+}
+
+/** Both gear lists in one athlete call; null when not connected or it fails. */
+export async function tryFetchAllGear(): Promise<{
+  shoes: StravaGear[];
+  bikes: StravaGear[];
+} | null> {
   if (!stravaConfigured() || !(await isStravaConnected())) return null;
   try {
     return await fetchAthleteGear();
@@ -282,18 +313,20 @@ export async function syncActivities(): Promise<SyncResult> {
 
       let status: "confirmed" | "pending_review";
       let splits: SplitInput[] = [];
+      let bikeId: number | null = null;
       if (preBaseline) {
-        // History only: visible in the log, zero shoe mileage.
+        // History only: visible in the log, zero gear mileage.
         status = "confirmed";
       } else {
         status = "pending_review";
-        const matchedShoeId = activity.gear_id
-          ? await findShoeIdByGear(activity.gear_id)
-          : null;
-        if (isRunSport(sport) && distanceKm > 0) {
-          splits = [{ shoe_id: matchedShoeId, km: distanceKm }];
-        } else if (matchedShoeId && distanceKm > 0) {
-          splits = [{ shoe_id: matchedShoeId, km: distanceKm }];
+        const matchedGearId = activity.gear_id ?? null;
+        if (isRideSport(sport)) {
+          bikeId = matchedGearId ? await findBikeIdByGear(matchedGearId) : null;
+        } else {
+          const matchedShoeId = matchedGearId ? await findShoeIdByGear(matchedGearId) : null;
+          if ((isRunSport(sport) || matchedShoeId) && distanceKm > 0) {
+            splits = [{ shoe_id: matchedShoeId, km: distanceKm }];
+          }
         }
         pendingNew++;
       }
@@ -311,6 +344,7 @@ export async function syncActivities(): Promise<SyncResult> {
           elevation_gain_m: activity.total_elevation_gain ?? null,
           status,
           raw_json: JSON.stringify(activity),
+          bike_id: bikeId,
         },
         splits
       );

@@ -39,6 +39,8 @@ export interface Activity {
   raw_json: string | null;
   detail_json: string | null;
   detail_synced_at: string | null;
+  bike_id: number | null;
+  bike_name: string | null;
   created_at: string;
 }
 
@@ -69,6 +71,31 @@ export interface StravaGear {
 }
 
 export interface ShoeOption {
+  id: number;
+  name: string;
+  role: string | null;
+  retired: boolean;
+}
+
+export interface Bike {
+  id: number;
+  name: string;
+  role: string | null;
+  strava_gear_id: string | null;
+  photo_path: string | null;
+  initial_km: number;
+  retired_at: string | null;
+  created_at: string;
+}
+
+export interface BikeWithMileage extends Bike {
+  current_km: number;
+  indoor_km: number;
+  outdoor_km: number;
+  ride_count: number;
+}
+
+export interface BikeOption {
   id: number;
   name: string;
   role: string | null;

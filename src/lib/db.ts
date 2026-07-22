@@ -103,11 +103,19 @@ const SCHEMA: string[] = [
   "CREATE INDEX IF NOT EXISTS idx_splits_shoe_id ON activity_splits(shoe_id)",
 ];
 
-// Real bikes. Baselines start at zero; link each to Strava gear in Settings and
-// set its baseline km from the Strava odometer if you want the historical total.
-const BASELINE_BIKES: Array<{ name: string; role: string; photo: string }> = [
-  { name: "TSW TR10 One", role: "road", photo: "bike-tsw-tr10-one.png" },
-  { name: "TSW Stamina", role: "mountain bike", photo: "bike-tsw-stamina.png" },
+// Real bikes with their current Strava odometers as baseline. The TR10 is the
+// trainer bike: its 33.4 km are the virtual rides already in the hub, so its
+// baseline is 0 and those confirmed rides supply the distance. The Stamina's
+// 467 km is outdoor history that lives in the log as pre-baseline (uncounted),
+// so its baseline carries that total.
+const BASELINE_BIKES: Array<{
+  name: string;
+  role: string;
+  photo: string;
+  initial_km: number;
+}> = [
+  { name: "TSW TR10 Speed Bike", role: "road", photo: "bike-tsw-tr10-one.png", initial_km: 0 },
+  { name: "TSW Stamina 2025", role: "mountain bike", photo: "bike-tsw-stamina.png", initial_km: 467 },
 ];
 
 // Real shoes with corrected current mileage (includes the 18 km moved from the
@@ -160,8 +168,8 @@ async function migrate(): Promise<void> {
     if (Number(bikes.rows[0].c) === 0) {
       for (const bike of BASELINE_BIKES) {
         await tx.execute({
-          sql: "INSERT INTO bikes (name, role, photo_path) VALUES (?, ?, ?)",
-          args: [bike.name, bike.role, bike.photo],
+          sql: "INSERT INTO bikes (name, role, photo_path, initial_km) VALUES (?, ?, ?, ?)",
+          args: [bike.name, bike.role, bike.photo, bike.initial_km],
         });
       }
     }

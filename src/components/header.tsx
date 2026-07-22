@@ -15,6 +15,7 @@ import type { Lang } from "@/lib/i18n";
 const NAV = [
   { href: "/", key: "log" },
   { href: "/insights", key: "insights" },
+  { href: "/fitness", key: "fitness" },
   { href: "/races", key: "races" },
   { href: "/review", key: "review" },
   { href: "/shoes", key: "shoes" },

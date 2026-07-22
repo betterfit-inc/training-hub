@@ -13,8 +13,12 @@ import {
   getActivity,
   getBike,
   getShoe,
+  recomputeActivityLoad,
+  recomputeAllLoads,
   replaceActivitySplits,
+  saveAthleteThresholds,
   setActivityBike,
+  setActivityLoadManual,
   setActivityRace,
   setBikeGear,
   setBikeRetired,
@@ -220,6 +224,90 @@ export async function setActivityRaceAction(input: {
         ? Math.round(input.goalPace)
         : null;
     await setActivityRace(input.activityId, input.isRace, goal);
+    refreshAll();
+    return { ok: true };
+  } catch (error) {
+    return fail(error, t.errors.generic);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Fitness (thresholds + per-activity load)
+// ---------------------------------------------------------------------------
+
+export interface ThresholdsInput {
+  maxHr: number;
+  restingHr: number;
+  lthr: number;
+  thresholdPaceSPerKm: number;
+  ftpW: number;
+  restingHrEstimated: boolean;
+  ftpProvisional: boolean;
+}
+
+function inRange(value: number, lo: number, hi: number): boolean {
+  return Number.isFinite(value) && value >= lo && value <= hi;
+}
+
+export async function saveThresholdsAction(input: ThresholdsInput): Promise<ActionResult> {
+  const t = await dict();
+  try {
+    const maxHr = Math.round(input.maxHr);
+    const restingHr = Math.round(input.restingHr);
+    const lthr = Math.round(input.lthr);
+    const thresholdPace = Math.round(input.thresholdPaceSPerKm);
+    const ftpW = Math.round(input.ftpW);
+    if (
+      !inRange(maxHr, 120, 230) ||
+      !inRange(restingHr, 25, 90) ||
+      !inRange(lthr, 90, 220) ||
+      !inRange(thresholdPace, 120, 600) ||
+      !inRange(ftpW, 50, 600) ||
+      restingHr >= lthr ||
+      lthr > maxHr
+    ) {
+      return { ok: false, error: t.errors.invalidThresholds };
+    }
+    await saveAthleteThresholds({
+      maxHr,
+      restingHr,
+      lthr,
+      thresholdPaceSPerKm: thresholdPace,
+      ftpW,
+      restingHrEstimated: input.restingHrEstimated,
+      ftpProvisional: input.ftpProvisional,
+    });
+    // Thresholds drive every TSS value, so the curves refresh with them.
+    await recomputeAllLoads();
+    refreshAll();
+    return { ok: true };
+  } catch (error) {
+    return fail(error, t.errors.generic);
+  }
+}
+
+export async function setActivityLoadManualAction(
+  activityId: number,
+  tss: number
+): Promise<ActionResult> {
+  const t = await dict();
+  try {
+    if (!(await getActivity(activityId))) return { ok: false, error: t.errors.activityNotFound };
+    const value = Math.round((Number(tss) || 0) * 10) / 10;
+    if (!Number.isFinite(value) || value < 0) return { ok: false, error: t.errors.invalidLoad };
+    await setActivityLoadManual(activityId, value);
+    refreshAll();
+    return { ok: true };
+  } catch (error) {
+    return fail(error, t.errors.generic);
+  }
+}
+
+export async function resetActivityLoadAction(activityId: number): Promise<ActionResult> {
+  const t = await dict();
+  try {
+    if (!(await getActivity(activityId))) return { ok: false, error: t.errors.activityNotFound };
+    await recomputeActivityLoad(activityId);
     refreshAll();
     return { ok: true };
   } catch (error) {

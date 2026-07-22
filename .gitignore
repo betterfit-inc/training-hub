@@ -37,6 +37,9 @@ yarn-error.log*
 # local data: SQLite database and uploaded shoe photos
 /data/
 
+# scratch space for validation scripts and sub-agent briefs (never committed)
+/scratchpad/
+
 # vercel
 .vercel
 

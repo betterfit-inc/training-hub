@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createClient, type Client, type InStatement } from "@libsql/client";
+import { computeLoad, type AthleteThresholds, type LoadMethod } from "./fitness";
 import type {
   Activity,
   ActivityWithSplits,
@@ -102,6 +103,25 @@ const SCHEMA: string[] = [
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS athlete_thresholds (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    max_hr INTEGER,
+    resting_hr INTEGER,
+    lthr INTEGER,
+    threshold_pace_s_per_km REAL,
+    ftp_w INTEGER,
+    resting_hr_estimated INTEGER NOT NULL DEFAULT 1,
+    ftp_provisional INTEGER NOT NULL DEFAULT 1,
+    updated_at TEXT
+  )`,
+  `CREATE TABLE IF NOT EXISTS activity_load (
+    activity_id INTEGER PRIMARY KEY REFERENCES activities(id) ON DELETE CASCADE,
+    tss REAL,
+    method TEXT,
+    intensity_factor REAL,
+    source TEXT NOT NULL DEFAULT 'auto',
+    computed_at TEXT
+  )`,
   "CREATE INDEX IF NOT EXISTS idx_activities_started_at ON activities(started_at)",
   "CREATE INDEX IF NOT EXISTS idx_activities_status ON activities(status)",
   "CREATE INDEX IF NOT EXISTS idx_splits_activity_id ON activity_splits(activity_id)",
@@ -184,6 +204,16 @@ async function migrate(): Promise<void> {
           args: [bike.name, bike.role, bike.photo, bike.initial_km],
         });
       }
+    }
+    const thresholds = await tx.execute("SELECT COUNT(*) AS c FROM athlete_thresholds");
+    if (Number(thresholds.rows[0].c) === 0) {
+      await tx.execute({
+        sql: `INSERT INTO athlete_thresholds
+              (id, max_hr, resting_hr, lthr, threshold_pace_s_per_km, ftp_w,
+               resting_hr_estimated, ftp_provisional, updated_at)
+              VALUES (1, ?, ?, ?, ?, ?, 1, 1, ?)`,
+        args: [199, 50, 176, 269, 150, new Date().toISOString()],
+      });
     }
     const baseline = await tx.execute(
       "SELECT value FROM app_meta WHERE key = 'baseline_date'"
@@ -743,4 +773,216 @@ export async function clearStravaAuth(): Promise<void> {
     "DELETE FROM strava_auth WHERE id = 1",
     "DELETE FROM app_meta WHERE key = 'athlete_name'",
   ]);
+}
+
+// ---------------------------------------------------------------------------
+// Athlete thresholds + training load (fitness engine)
+// ---------------------------------------------------------------------------
+
+// Matches the migration seed; used only if the row is somehow missing.
+const THRESHOLD_DEFAULTS: AthleteThresholds = {
+  maxHr: 199,
+  restingHr: 50,
+  lthr: 176,
+  thresholdPaceSPerKm: 269,
+  ftpW: 150,
+  restingHrEstimated: true,
+  ftpProvisional: true,
+  updatedAt: null,
+};
+
+interface AthleteThresholdsRow {
+  max_hr: number | null;
+  resting_hr: number | null;
+  lthr: number | null;
+  threshold_pace_s_per_km: number | null;
+  ftp_w: number | null;
+  resting_hr_estimated: number;
+  ftp_provisional: number;
+  updated_at: string | null;
+}
+
+export async function getAthleteThresholds(): Promise<AthleteThresholds> {
+  const row = await one<AthleteThresholdsRow>(
+    `SELECT max_hr, resting_hr, lthr, threshold_pace_s_per_km, ftp_w,
+            resting_hr_estimated, ftp_provisional, updated_at
+     FROM athlete_thresholds WHERE id = 1`
+  );
+  if (!row) return { ...THRESHOLD_DEFAULTS };
+  return {
+    maxHr: row.max_hr ?? THRESHOLD_DEFAULTS.maxHr,
+    restingHr: row.resting_hr ?? THRESHOLD_DEFAULTS.restingHr,
+    lthr: row.lthr ?? THRESHOLD_DEFAULTS.lthr,
+    thresholdPaceSPerKm: row.threshold_pace_s_per_km ?? THRESHOLD_DEFAULTS.thresholdPaceSPerKm,
+    ftpW: row.ftp_w ?? THRESHOLD_DEFAULTS.ftpW,
+    restingHrEstimated: row.resting_hr_estimated !== 0,
+    ftpProvisional: row.ftp_provisional !== 0,
+    updatedAt: row.updated_at ?? null,
+  };
+}
+
+export interface AthleteThresholdFields {
+  maxHr: number;
+  restingHr: number;
+  lthr: number;
+  thresholdPaceSPerKm: number;
+  ftpW: number;
+  restingHrEstimated: boolean;
+  ftpProvisional: boolean;
+}
+
+export async function saveAthleteThresholds(fields: AthleteThresholdFields): Promise<void> {
+  await exec(
+    `INSERT INTO athlete_thresholds
+       (id, max_hr, resting_hr, lthr, threshold_pace_s_per_km, ftp_w,
+        resting_hr_estimated, ftp_provisional, updated_at)
+     VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       max_hr = excluded.max_hr,
+       resting_hr = excluded.resting_hr,
+       lthr = excluded.lthr,
+       threshold_pace_s_per_km = excluded.threshold_pace_s_per_km,
+       ftp_w = excluded.ftp_w,
+       resting_hr_estimated = excluded.resting_hr_estimated,
+       ftp_provisional = excluded.ftp_provisional,
+       updated_at = excluded.updated_at`,
+    [
+      fields.maxHr,
+      fields.restingHr,
+      fields.lthr,
+      fields.thresholdPaceSPerKm,
+      fields.ftpW,
+      fields.restingHrEstimated ? 1 : 0,
+      fields.ftpProvisional ? 1 : 0,
+      new Date().toISOString(),
+    ]
+  );
+}
+
+export interface ActivityLoadRow {
+  tss: number;
+  method: string | null;
+  intensity_factor: number | null;
+  source: string;
+}
+
+export async function getActivityLoad(activityId: number): Promise<ActivityLoadRow | null> {
+  return one<ActivityLoadRow>(
+    "SELECT tss, method, intensity_factor, source FROM activity_load WHERE activity_id = ? AND tss IS NOT NULL",
+    [activityId]
+  );
+}
+
+/** Manual override: keeps any existing method, clears the intensity factor. */
+export async function setActivityLoadManual(activityId: number, tss: number): Promise<void> {
+  await exec(
+    `INSERT INTO activity_load (activity_id, tss, method, intensity_factor, source, computed_at)
+     VALUES (?, ?, NULL, NULL, 'manual', ?)
+     ON CONFLICT(activity_id) DO UPDATE SET
+       tss = excluded.tss,
+       source = 'manual',
+       intensity_factor = NULL,
+       computed_at = excluded.computed_at`,
+    [activityId, tss, new Date().toISOString()]
+  );
+}
+
+const ACTIVITY_LOAD_FIELDS =
+  "id, sport_type, moving_time_s, distance_km, avg_hr, avg_pace_s_per_km, rpe, raw_json";
+
+interface ActivityLoadInput {
+  id: number;
+  sport_type: string | null;
+  moving_time_s: number | null;
+  distance_km: number | null;
+  avg_hr: number | null;
+  avg_pace_s_per_km: number | null;
+  rpe: number | null;
+  raw_json: string | null;
+}
+
+const UPSERT_AUTO_LOAD_SQL = `INSERT INTO activity_load
+    (activity_id, tss, method, intensity_factor, source, computed_at)
+  VALUES (?, ?, ?, ?, 'auto', ?)
+  ON CONFLICT(activity_id) DO UPDATE SET
+    tss = excluded.tss,
+    method = excluded.method,
+    intensity_factor = excluded.intensity_factor,
+    computed_at = excluded.computed_at
+  WHERE activity_load.source != 'manual'`;
+
+/** Bulk auto upsert; never clobbers rows the athlete edited by hand. */
+export async function upsertActivityLoads(
+  rows: { activityId: number; tss: number; method: LoadMethod; intensityFactor: number | null }[]
+): Promise<void> {
+  if (rows.length === 0) return;
+  const now = new Date().toISOString();
+  const CHUNK = 200;
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    await batchWrite(
+      rows.slice(i, i + CHUNK).map((r) => ({
+        sql: UPSERT_AUTO_LOAD_SQL,
+        args: [r.activityId, r.tss, r.method, r.intensityFactor, now],
+      }))
+    );
+  }
+}
+
+export async function listActivityLoadsForPmc(): Promise<{ started_at: string; tss: number }[]> {
+  return many<{ started_at: string; tss: number }>(
+    `SELECT a.started_at AS started_at, l.tss AS tss
+     FROM activities a
+     JOIN activity_load l ON l.activity_id = a.id
+     WHERE a.status = 'confirmed' AND l.tss IS NOT NULL AND a.started_at IS NOT NULL
+     ORDER BY a.started_at ASC`
+  );
+}
+
+/** Recomputes every confirmed activity's load; returns the auto rows written. */
+export async function recomputeAllLoads(): Promise<{ count: number }> {
+  const thresholds = await getAthleteThresholds();
+  const activities = await many<ActivityLoadInput>(
+    `SELECT ${ACTIVITY_LOAD_FIELDS} FROM activities WHERE status = 'confirmed'`
+  );
+  const rows: { activityId: number; tss: number; method: LoadMethod; intensityFactor: number | null }[] =
+    [];
+  for (const activity of activities) {
+    const load = computeLoad(activity, thresholds);
+    if (load) {
+      rows.push({
+        activityId: activity.id,
+        tss: load.tss,
+        method: load.method,
+        intensityFactor: load.intensityFactor,
+      });
+    }
+  }
+  await upsertActivityLoads(rows);
+  return { count: rows.length };
+}
+
+/** Recompute a single activity as an auto row, overriding any manual value. */
+export async function recomputeActivityLoad(activityId: number): Promise<void> {
+  const thresholds = await getAthleteThresholds();
+  const activity = await one<ActivityLoadInput>(
+    `SELECT ${ACTIVITY_LOAD_FIELDS} FROM activities WHERE id = ?`,
+    [activityId]
+  );
+  if (!activity) return;
+  const load = computeLoad(activity, thresholds);
+  if (!load) {
+    await exec("DELETE FROM activity_load WHERE activity_id = ?", [activityId]);
+    return;
+  }
+  await exec(
+    `INSERT INTO activity_load (activity_id, tss, method, intensity_factor, source, computed_at)
+     VALUES (?, ?, ?, ?, 'auto', ?)
+     ON CONFLICT(activity_id) DO UPDATE SET
+       tss = excluded.tss,
+       method = excluded.method,
+       intensity_factor = excluded.intensity_factor,
+       source = 'auto',
+       computed_at = excluded.computed_at`,
+    [activityId, load.tss, load.method, load.intensityFactor, new Date().toISOString()]
+  );
 }

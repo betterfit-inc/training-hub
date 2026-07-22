@@ -20,7 +20,8 @@ import {
   GearMatcher,
   ManualActivityForm,
 } from "@/components/settings-forms";
-import { getMeta, listBikes, listShoes } from "@/lib/db";
+import { ThresholdsForm } from "@/components/thresholds-form";
+import { getAthleteThresholds, getMeta, listBikes, listShoes } from "@/lib/db";
 import { getDict } from "@/lib/lang";
 import { isStravaConnected, stravaConfigured, tryFetchAllGear } from "@/lib/strava";
 import { fmtDate, fmtDateLong, fmtTime } from "@/lib/format";
@@ -41,6 +42,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
   const bikeGear = allGear?.bikes ?? null;
   const shoes = await listShoes();
   const bikes = await listBikes();
+  const thresholds = await getAthleteThresholds();
 
   const justConnected = params.connected === "1";
   const errorKey = typeof params.error === "string" ? params.error : null;
@@ -161,6 +163,16 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
                 {fillStr(t.settingsPage.baselineNote, { date: fmtDateLong(baselineDate, lang) })}
               </p>
             ) : null}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>{t.fitness.thresholds.title}</CardTitle>
+            <CardDescription>{t.fitness.thresholds.body}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ThresholdsForm thresholds={thresholds} />
           </CardContent>
         </Card>
 

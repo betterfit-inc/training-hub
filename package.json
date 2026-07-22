@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "seed": "tsx scripts/seed.ts",
-    "seed:clear": "tsx scripts/seed.ts --clear"
+    "seed:clear": "tsx scripts/seed.ts --clear",
+    "backfill:load": "tsx scripts/backfill-load.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.17.4",

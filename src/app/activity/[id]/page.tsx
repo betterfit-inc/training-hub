@@ -4,12 +4,14 @@ import { ArrowLeftIcon, CheckCircle2Icon, ClockIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MedalIcon } from "lucide-react";
 import { ActivityChart } from "@/components/activity-chart";
+import { ActivityLoadControl } from "@/components/activity-load-control";
 import { BikeSection } from "@/components/bike-section";
 import { RaceControl } from "@/components/race-control";
 import { JournalEditor } from "@/components/journal-editor";
 import { SplitsSection } from "@/components/splits-section";
 import { SportIcon } from "@/components/sport-icon";
-import { getActivity, listBikes, listShoes } from "@/lib/db";
+import { getActivity, getActivityLoad, getAthleteThresholds, listBikes, listShoes } from "@/lib/db";
+import { computeLoad } from "@/lib/fitness";
 import { getDict } from "@/lib/lang";
 import {
   ensureActivityDetail,
@@ -202,6 +204,18 @@ export default async function ActivityPage({ params }: PageProps<"/activity/[id]
     : [];
   const metrics = ride ? rideMetrics(activity) : null;
 
+  // Training load: the persisted value from backfill, else computed on the fly
+  // for display from the current thresholds.
+  const storedLoad = await getActivityLoad(activity.id);
+  const computedLoad = storedLoad ? null : computeLoad(activity, await getAthleteThresholds());
+  const loadTss = storedLoad?.tss ?? computedLoad?.tss ?? null;
+  const loadMethod = storedLoad?.method ?? computedLoad?.method ?? null;
+  const loadSource: "auto" | "manual" | "computed" = storedLoad
+    ? storedLoad.source === "manual"
+      ? "manual"
+      : "auto"
+    : "computed";
+
   const detail = await ensureActivityDetail(activity);
   const streams = await ensureActivityStreams(activity);
   const laps = (detail?.laps ?? []).filter(
@@ -339,6 +353,15 @@ export default async function ActivityPage({ params }: PageProps<"/activity/[id]
           ) : null}
         </dl>
       )}
+
+      {loadTss != null ? (
+        <ActivityLoadControl
+          activityId={activity.id}
+          tss={loadTss}
+          method={loadMethod}
+          source={loadSource}
+        />
+      ) : null}
 
       {streams ? (
         <Card className="mt-6">

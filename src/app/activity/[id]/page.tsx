@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeftIcon, CheckCircle2Icon, ClockIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MedalIcon } from "lucide-react";
+import { ActivityChart } from "@/components/activity-chart";
 import { BikeSection } from "@/components/bike-section";
 import { RaceControl } from "@/components/race-control";
 import { JournalEditor } from "@/components/journal-editor";
@@ -12,6 +13,7 @@ import { getActivity, listBikes, listShoes } from "@/lib/db";
 import { getDict } from "@/lib/lang";
 import {
   ensureActivityDetail,
+  ensureActivityStreams,
   type StravaLap,
   type StravaSplit,
 } from "@/lib/strava";
@@ -201,6 +203,7 @@ export default async function ActivityPage({ params }: PageProps<"/activity/[id]
   const metrics = ride ? rideMetrics(activity) : null;
 
   const detail = await ensureActivityDetail(activity);
+  const streams = await ensureActivityStreams(activity);
   const laps = (detail?.laps ?? []).filter(
     (lap) => (lap.distance ?? 0) > 0 || (lap.moving_time ?? 0) > 0
   );
@@ -336,6 +339,17 @@ export default async function ActivityPage({ params }: PageProps<"/activity/[id]
           ) : null}
         </dl>
       )}
+
+      {streams ? (
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle>{t.chart.analysis}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ActivityChart streams={streams} isRun={run} isRide={ride} />
+          </CardContent>
+        </Card>
+      ) : null}
 
       {structuredLaps ? (
         <Card className="mt-6">

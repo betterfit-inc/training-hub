@@ -236,6 +236,16 @@ const en = {
     goalPacePlaceholder: "mm:ss",
     goalPaceHint: "Optional. Used to compare training blocks later.",
   },
+  chart: {
+    heartRate: "Heart rate",
+    pace: "Pace",
+    power: "Power",
+    cadence: "Cadence",
+    elevation: "Elevation",
+    distance: "Distance",
+    time: "Time",
+    analysis: "Analysis",
+  },
   shoesPage: {
     title: "Shoes",
     empty: "No shoes in the rack yet.",
@@ -652,6 +662,16 @@ const pt: Dict = {
     goalPace: "Ritmo alvo",
     goalPacePlaceholder: "mm:ss",
     goalPaceHint: "Opcional. Usado para comparar blocos de treino depois.",
+  },
+  chart: {
+    heartRate: "FC",
+    pace: "Ritmo",
+    power: "Potência",
+    cadence: "Cadência",
+    elevation: "Elevação",
+    distance: "Distância",
+    time: "Tempo",
+    analysis: "Análise",
   },
   shoesPage: {
     title: "Tênis",

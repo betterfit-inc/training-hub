@@ -77,6 +77,11 @@ const SCHEMA: string[] = [
     km REAL NOT NULL,
     note TEXT
   )`,
+  `CREATE TABLE IF NOT EXISTS activity_streams (
+    activity_id INTEGER PRIMARY KEY REFERENCES activities(id) ON DELETE CASCADE,
+    json TEXT NOT NULL,
+    synced_at TEXT
+  )`,
   `CREATE TABLE IF NOT EXISTS bikes (
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL,
@@ -639,6 +644,22 @@ export async function confirmActivity(
       args: [id, split.shoe_id, split.km],
     })),
   ]);
+}
+
+export async function getActivityStreamsJson(activityId: number): Promise<string | null> {
+  const row = await one<{ json: string }>(
+    "SELECT json FROM activity_streams WHERE activity_id = ?",
+    [activityId]
+  );
+  return row?.json ?? null;
+}
+
+export async function saveActivityStreams(activityId: number, json: string): Promise<void> {
+  await exec(
+    `INSERT INTO activity_streams (activity_id, json, synced_at) VALUES (?, ?, ?)
+     ON CONFLICT(activity_id) DO UPDATE SET json = excluded.json, synced_at = excluded.synced_at`,
+    [activityId, json, new Date().toISOString()]
+  );
 }
 
 export async function saveActivityDetail(id: number, detailJson: string): Promise<void> {

@@ -3,15 +3,18 @@ import {
   countPending,
   findBikeIdByGear,
   findShoeIdByGear,
+  getActivityStreamsJson,
   getMeta,
   getStravaAuth,
   insertSyncedActivity,
   latestSyncedStartEpoch,
   saveActivityDetail,
+  saveActivityStreams,
   saveStravaAuth,
   setMeta,
 } from "./db";
 import { isRideSport } from "./cycling";
+import { normalizeStreams, type ActivityStreams } from "./streams";
 import type { Activity } from "./types";
 import { round2 } from "./format";
 import { isRunSport } from "./validate";
@@ -246,6 +249,40 @@ export async function ensureActivityDetail(
     const detail = await apiGet<StravaActivityDetail>(`/activities/${activity.strava_id}`);
     await saveActivityDetail(activity.id, JSON.stringify(detail));
     return detail;
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Per-second streams (heartrate, pace, power, etc.), fetched lazily and cached
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the cached, normalized streams for an activity, fetching and caching
+ * them on first view. Mirrors ensureActivityDetail: one API call per activity
+ * ever. Returns null for manual activities, when disconnected, when the fetch
+ * fails, or when Strava returns no usable stream (empties are never cached).
+ */
+export async function ensureActivityStreams(
+  activity: Pick<Activity, "id" | "strava_id">
+): Promise<ActivityStreams | null> {
+  const cached = await getActivityStreamsJson(activity.id);
+  if (cached) return JSON.parse(cached) as ActivityStreams;
+  if (!activity.strava_id) return null;
+  if (!stravaConfigured() || !(await isStravaConnected())) return null;
+  try {
+    const raw = await apiGet<Record<string, { data: number[] }>>(
+      `/activities/${activity.strava_id}/streams`,
+      {
+        keys: "time,distance,heartrate,velocity_smooth,watts,cadence,altitude",
+        key_by_type: "true",
+      }
+    );
+    const streams = normalizeStreams(raw);
+    if (!streams) return null;
+    await saveActivityStreams(activity.id, JSON.stringify(streams));
+    return streams;
   } catch {
     return null;
   }

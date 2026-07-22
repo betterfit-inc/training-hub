@@ -282,6 +282,7 @@ const en = {
     unretire: "Unretire",
     indoorOutdoor: "{indoor} indoor · {outdoor} outdoor",
     rides: "{n} rides",
+    lifetime: "Lifetime distance · new rides count from here",
   },
   bikeDialog: {
     editTitle: "Edit {name}",
@@ -669,6 +670,7 @@ const pt: Dict = {
     unretire: "Reativar",
     indoorOutdoor: "{indoor} indoor · {outdoor} outdoor",
     rides: "{n} pedais",
+    lifetime: "Distância total · novos pedais contam a partir daqui",
   },
   bikeDialog: {
     editTitle: "Editar {name}",

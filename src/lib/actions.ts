@@ -15,6 +15,7 @@ import {
   getShoe,
   replaceActivitySplits,
   setActivityBike,
+  setActivityRace,
   setBikeGear,
   setBikeRetired,
   setShoeGear,
@@ -198,6 +199,27 @@ export async function setActivityBikeAction(
     if (!activity) return { ok: false, error: t.errors.activityNotFound };
     const resolved = bikeId != null && (await getBike(bikeId)) ? bikeId : null;
     await setActivityBike(activityId, resolved);
+    refreshAll();
+    return { ok: true };
+  } catch (error) {
+    return fail(error, t.errors.generic);
+  }
+}
+
+export async function setActivityRaceAction(input: {
+  activityId: number;
+  isRace: boolean;
+  goalPace: number | null;
+}): Promise<ActionResult> {
+  const t = await dict();
+  try {
+    const activity = await getActivity(input.activityId);
+    if (!activity) return { ok: false, error: t.errors.activityNotFound };
+    const goal =
+      input.goalPace != null && Number.isFinite(input.goalPace) && input.goalPace > 0
+        ? Math.round(input.goalPace)
+        : null;
+    await setActivityRace(input.activityId, input.isRace, goal);
     refreshAll();
     return { ok: true };
   } catch (error) {

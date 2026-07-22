@@ -41,6 +41,8 @@ export interface Activity {
   detail_synced_at: string | null;
   bike_id: number | null;
   bike_name: string | null;
+  is_race: number;
+  goal_pace_s_per_km: number | null;
   created_at: string;
 }
 

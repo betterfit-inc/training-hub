@@ -62,6 +62,21 @@ export function fmtPace(sPerKm: number | null | undefined): string {
   return `${min}:${String(sec).padStart(2, "0")} /km`;
 }
 
+/** "4:39" (no unit), for pace inputs and compact display. */
+export function fmtPaceShort(sPerKm: number | null | undefined): string {
+  if (!sPerKm || sPerKm <= 0) return "";
+  const total = Math.round(sPerKm);
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+}
+
+/** Parses "m:ss" or "mm:ss" pace into seconds per km; null if invalid. */
+export function parsePace(input: string): number | null {
+  const match = /^(\d{1,2}):([0-5]?\d)$/.exec(input.trim());
+  if (!match) return null;
+  const s = Number(match[1]) * 60 + Number(match[2]);
+  return s > 0 ? s : null;
+}
+
 export function fmtDuration(s: number | null | undefined): string {
   if (!s || s <= 0) return "–";
   const h = Math.floor(s / 3600);

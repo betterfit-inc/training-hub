@@ -3,6 +3,7 @@ import {
   CableIcon,
   ChevronRightIcon,
   FootprintsIcon,
+  MedalIcon,
   RefreshCwIcon,
   SearchXIcon,
 } from "lucide-react";
@@ -115,6 +116,9 @@ function ActivityRow({
         <span className="min-w-0">
           <span className="flex items-center gap-1.5">
             <SportIcon sport={activity.sport_type} className="shrink-0" />
+            {activity.is_race === 1 ? (
+              <MedalIcon className="size-3.5 shrink-0 text-primary" aria-label={t.detail.race} />
+            ) : null}
             <span className="truncate text-sm font-medium transition-colors group-hover:text-primary">
               {activity.name ?? t.log.untitled}
             </span>

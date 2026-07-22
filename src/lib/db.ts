@@ -150,6 +150,13 @@ async function migrate(): Promise<void> {
   await client.execute(
     "CREATE INDEX IF NOT EXISTS idx_activities_bike_id ON activities(bike_id)"
   );
+  // Migration 005: race marking for block comparison.
+  if (!names.has("is_race")) {
+    await client.execute("ALTER TABLE activities ADD COLUMN is_race INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!names.has("goal_pace_s_per_km")) {
+    await client.execute("ALTER TABLE activities ADD COLUMN goal_pace_s_per_km REAL");
+  }
 
   // Migration 002: baseline shoes + baseline date, only on an empty database.
   // The write transaction serializes concurrent cold starts.
@@ -457,6 +464,18 @@ export async function findBikeIdByGear(gearId: string): Promise<number | null> {
 
 export async function setActivityBike(activityId: number, bikeId: number | null): Promise<void> {
   await exec("UPDATE activities SET bike_id = ? WHERE id = ?", [bikeId, activityId]);
+}
+
+export async function setActivityRace(
+  activityId: number,
+  isRace: boolean,
+  goalPace: number | null
+): Promise<void> {
+  await exec("UPDATE activities SET is_race = ?, goal_pace_s_per_km = ? WHERE id = ?", [
+    isRace ? 1 : 0,
+    isRace ? goalPace : null,
+    activityId,
+  ]);
 }
 
 // ---------------------------------------------------------------------------

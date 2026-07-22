@@ -2,7 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeftIcon, CheckCircle2Icon, ClockIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { MedalIcon } from "lucide-react";
 import { BikeSection } from "@/components/bike-section";
+import { RaceControl } from "@/components/race-control";
 import { JournalEditor } from "@/components/journal-editor";
 import { SplitsSection } from "@/components/splits-section";
 import { SportIcon } from "@/components/sport-icon";
@@ -244,7 +246,10 @@ export default async function ActivityPage({ params }: PageProps<"/activity/[id]
           </span>
         </div>
         <div className="mt-1.5 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="font-display text-3xl font-semibold tracking-tight">
+          <h1 className="flex items-center gap-2 font-display text-3xl font-semibold tracking-tight">
+            {activity.is_race === 1 ? (
+              <MedalIcon className="size-6 shrink-0 text-primary" aria-label={t.detail.race} />
+            ) : null}
             {activity.name ?? t.log.untitled}
           </h1>
           {confirmed ? (
@@ -266,6 +271,12 @@ export default async function ActivityPage({ params }: PageProps<"/activity/[id]
         <p className="mt-3 text-sm leading-relaxed text-muted-foreground italic">
           {description}
         </p>
+      ) : null}
+
+      {confirmed ? (
+        <div className="mt-4">
+          <RaceControl activity={activity} />
+        </div>
       ) : null}
 
       {ride && metrics ? (

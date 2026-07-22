@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createClient, type Client, type InStatement } from "@libsql/client";
+import type { BlockActivity } from "./blocks";
 import { computeLoad, type AthleteThresholds, type LoadMethod } from "./fitness";
 import type {
   Activity,
@@ -571,6 +572,20 @@ export async function listRaces(): Promise<ActivityWithSplits[]> {
     `${ACTIVITY_SELECT} WHERE a.is_race = 1 ORDER BY a.started_at DESC, a.id DESC`
   );
   return attachSplits(activities);
+}
+
+/** Confirmed activities in [fromIso, toIso), oldest first, for block analysis. */
+export async function listBlockActivities(
+  fromIso: string,
+  toIso: string
+): Promise<BlockActivity[]> {
+  return many<BlockActivity>(
+    `SELECT started_at, sport_type, distance_km, moving_time_s, avg_hr, avg_pace_s_per_km
+     FROM activities
+     WHERE status = 'confirmed' AND started_at >= ? AND started_at < ?
+     ORDER BY started_at ASC`,
+    [fromIso, toIso]
+  );
 }
 
 export async function activityExistsByStravaId(stravaId: number): Promise<boolean> {

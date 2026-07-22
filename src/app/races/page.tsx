@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { MedalIcon } from "lucide-react";
+import { GitCompareIcon, MedalIcon } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { FeelingBadge } from "@/components/feeling-badge";
 import { listRaces } from "@/lib/db";
@@ -33,18 +33,30 @@ export default async function RacesPage() {
 
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6">
-      <h1 className="font-display text-4xl font-bold uppercase">{t.racesPage.title}</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        {races.length === 0
-          ? t.racesPage.empty
-          : fastestHalf
-            ? fillStr(t.racesPage.subtitle, {
-                n: races.length,
-                distance: t.racesPage.categories.half.toLowerCase(),
-                pace: fmtPace(fastestHalf.avg_pace_s_per_km),
-              })
-            : fillStr(t.racesPage.subtitlePlain, { n: races.length })}
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="font-display text-4xl font-bold uppercase">{t.racesPage.title}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {races.length === 0
+              ? t.racesPage.empty
+              : fastestHalf
+                ? fillStr(t.racesPage.subtitle, {
+                    n: races.length,
+                    distance: t.racesPage.categories.half.toLowerCase(),
+                    pace: fmtPace(fastestHalf.avg_pace_s_per_km),
+                  })
+                : fillStr(t.racesPage.subtitlePlain, { n: races.length })}
+          </p>
+        </div>
+        {races.length >= 2 ? (
+          <Link
+            href="/races/compare"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:border-ring hover:text-foreground"
+          >
+            <GitCompareIcon className="size-3.5" aria-hidden /> {t.racesPage.compare}
+          </Link>
+        ) : null}
+      </div>
 
       {races.length === 0 ? (
         <div className="mt-6">

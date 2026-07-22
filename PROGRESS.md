@@ -46,3 +46,18 @@ Engine modelling choices (reversible; documented so you can veto):
 - Screenshots (light + dark, viewed): `scratchpad/shots/fitness-6m-{light,dark}.png`, `fitness-all-{light,dark}.png`, `settings-{light,dark}.png`, `activity-128-{light,dark}.png`.
 
 **Deferred (roadmap nice-to-haves, not blocking):** recovery-hours estimate, streak, week-vs-plan.
+
+## Phase 6 — Race block comparison ✅ shipped
+
+**What shipped**
+- `src/lib/blocks.ts`: pure engine. `buildBlock()` (12-week default block → weekly buckets aligned by weeks-to-race, volume/sessions/runs, time-in-zone estimated from each activity's avg HR, polarization, quality runs) and `analyzeRace()` (splits, fade, in-race time-in-zone, time at/above/below goal pace + longest at-goal stretch, from per-second streams).
+- `/races/compare?a=&b=&weeks=` page + `race-compare.tsx`: two category-grouped race pickers + 8/12/16-week selector, per-race volume tiles, zone bars w/ polarization, overlaid weekly-running-volume + longest-run charts (aligned by weeks-to-race), and a race head-to-head card. "Compare" link added to the races page. New read query `listBlockActivities` (no schema change). Streams fetched lazily via `ensureActivityStreams` (only the 2 races).
+
+**Validation (shipped engine run against real Turso data, matched my independent reference)**
+- Block invariants hold: `sum(weekly.km) === totalKm`, `weekly.length === weeks` for all three HMs.
+- Athena's 12wk: 147 sessions / 47 runs / 590km total / 398km running / 113h, Z1 68%. Jundiaí: 90 / 54 / 570 / 529 / 91.5h, Z1 56%. ASICS Golden: 94 / 56 / 617 / 569 / 91.6h. All match ground-truth.
+- Head-to-head: Jundiaí **+9 s/km positive split, +3.2% fade, in-race Z5 68% / Z4 28%**; Athena's −3 s/km negative split, −1.6% fade, Z5 83%; ASICS Golden **+65 s/km positive split, 16.5% fade** (ran it easy at 154 bpm) — a real, surfaced insight.
+- `npm run build` clean (`/races/compare` registered), `npx eslint src` exit 0.
+- Screenshots (light + dark, viewed): `scratchpad/shots/compare-jundiai-athena-{light,dark}.png`, `compare-jundiai-asics-light.png`, `compare-default-light.png`.
+
+**Note:** block time-in-zone is estimated from each activity's average HR (labeled in-UI). Per-second zone time across a whole block would need streams backfilled for every block activity (rate-limited) — a future refinement; race-day analysis already uses full streams.

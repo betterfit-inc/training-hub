@@ -12,6 +12,10 @@ The prior-phase log (Phase 3) is preserved below this section.
 - **Ingest auth** = shared machine token in `Authorization: Bearer`, checked constant-time against `HEALTH_INGEST_SECRET` (reuses `crypto.ts`). Unconfigured secret = endpoint CLOSED (503), never open. Path allowlisted in `src/proxy.ts` so the owner-session page gate does not block the machine caller (the route is its own guard).
 - **Idempotent ingest** = delete-then-insert of a `(date, source)`'s rows in one atomic write batch, so a re-sync overwrites in place and a metric that drops out of a later snapshot leaves no stale row. A manual row for the same metric/day is untouched (different source).
 
+## Incident (self-reported, resolved)
+
+While validating the Python sync's mock mode against a locally-started dev server, I set `DATABASE_URL` to a scratch sqlite file — but `.env.local` sets `TURSO_DATABASE_URL` (the shared prod DB), and the client prefers `TURSO_*` over `DATABASE_URL`. So the mock POST wrote 18 `garmin` rows (date 2026-07-23) into the prod `health_metrics` table. I stopped the server and deleted exactly those rows; prod `health_metrics` is back to 0 rows. The additive migration 7 (table creation) remains in prod, which is harmless — it is the same idempotent migration that runs on deploy. Takeaway: to exercise the app locally against a local DB you must UNSET `TURSO_*`, not just set `DATABASE_URL` (the e2e harness does exactly this). The ingest pipeline itself validated correctly (18 metrics normalized + upserted).
+
 ## Open questions (for the PR / owner)
 
 - Garmin first-login MFA is a one-time interactive step that cannot run headless — the sync service + Action are built and documented; the token bootstrap is the single manual step (see `services/garmin-sync/README.md`).
@@ -33,6 +37,7 @@ The prior-phase log (Phase 3) is preserved below this section.
 | `/health` page + nav + layout wiring | DONE (verify green) | RSC assembles readiness/recovery/trends/panel/check-in; empty states when no data. Header widened to `max-w-7xl` to fit the 10th nav item + the badge (was overflowing at `max-w-5xl`). |
 | Seed computes `activity_load` | DONE (verify green) | `scripts/seed.ts` now runs `recomputeAllLoads()` via the real write path so fitness/readiness/recovery have data in dev + e2e. |
 | Coach: morning readiness narrative | DONE (verify green) | `coach.ts` buildReadinessContext + runReadinessSummary read the GENERIC model only (readiness + recovery + resolved signal lines); `generateReadinessNarrativeAction` (auth+coach gated) persists via app_meta; `readiness-coach.tsx` card on /health mirrors the weekly-digest UX; replies in the user language. |
+| Garmin sync service + Actions cron | DONE (verify green) | `services/garmin-sync/` (`sync.py`, `requirements.txt`, `README.md`, `mock-snapshot.json`) — standalone python-garminconnect job, trailing-window fetch, per-metric graceful degradation, loud on login/ingest failure, `SYNC_MOCK=1` path. `.github/workflows/garmin-sync.yml` daily cron (12:00 UTC) + dispatch, token restored from a base64 secret. App builds/tests fully ignore the folder (Python; not in tsconfig/knip/madge; prettier skips .py, checks the yml). Validated the mock POST against a running app (18 metrics ingested). One-time Garmin MFA login is the documented manual step. |
 | Self-QA (screenshots, light + dark) | DONE | Captured `/health` in both themes via a throwaway Playwright spec; fixed the header badge/Sync collision + nav overflow and a clipped trend x-tick; re-verified. e2e `health.spec.ts` drives the real ingest→panel→readiness→recovery→badge path in-browser. |
 
 ---

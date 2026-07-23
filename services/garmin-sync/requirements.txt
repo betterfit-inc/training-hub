@@ -1,0 +1,5 @@
+# Pinned so a Garmin-side TLS/fingerprint change can't silently pull an
+# incompatible release. python-garminconnect >=0.3.5 rebuilt login on curl_cffi
+# (survives the March 2026 Cloudflare fingerprinting break); bump deliberately.
+garminconnect==0.3.6
+requests==2.32.3

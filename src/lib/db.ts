@@ -3,6 +3,7 @@ import path from "node:path";
 import { createClient, type Client, type InStatement } from "@libsql/client";
 import type { BlockActivity } from "./blocks";
 import { computeLoad, type AthleteThresholds, type LoadMethod } from "./fitness";
+import { currentAthlete, requireAthlete } from "./identity";
 import type {
   Activity,
   ActivityWithSplits,
@@ -229,8 +230,8 @@ async function migrate(): Promise<void> {
         sql: `INSERT INTO athlete_thresholds
               (id, max_hr, resting_hr, lthr, threshold_pace_s_per_km, ftp_w,
                resting_hr_estimated, ftp_provisional, updated_at)
-              VALUES (1, ?, ?, ?, ?, ?, 1, 1, ?)`,
-        args: [199, 50, 176, 269, 150, new Date().toISOString()],
+              VALUES (?, ?, ?, ?, ?, ?, 1, 1, ?)`,
+        args: [currentAthlete().id, 199, 50, 176, 269, 150, new Date().toISOString()],
       });
     }
     const baseline = await tx.execute("SELECT value FROM app_meta WHERE key = 'baseline_date'");
@@ -772,7 +773,8 @@ export interface StravaAuthRow {
 
 export async function getStravaAuth(): Promise<StravaAuthRow | null> {
   const row = await one<StravaAuthRow>(
-    "SELECT access_token, refresh_token, expires_at FROM strava_auth WHERE id = 1"
+    "SELECT access_token, refresh_token, expires_at FROM strava_auth WHERE id = ?",
+    [currentAthlete().id]
   );
   if (!row || !row.access_token || !row.refresh_token) return null;
   return row;
@@ -781,16 +783,16 @@ export async function getStravaAuth(): Promise<StravaAuthRow | null> {
 export async function saveStravaAuth(auth: StravaAuthRow): Promise<void> {
   await exec(
     `INSERT INTO strava_auth (id, access_token, refresh_token, expires_at)
-     VALUES (1, ?, ?, ?)
+     VALUES (?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET access_token = excluded.access_token,
        refresh_token = excluded.refresh_token, expires_at = excluded.expires_at`,
-    [auth.access_token, auth.refresh_token, auth.expires_at]
+    [requireAthlete().id, auth.access_token, auth.refresh_token, auth.expires_at]
   );
 }
 
 export async function clearStravaAuth(): Promise<void> {
   await batchWrite([
-    "DELETE FROM strava_auth WHERE id = 1",
+    { sql: "DELETE FROM strava_auth WHERE id = ?", args: [requireAthlete().id] },
     "DELETE FROM app_meta WHERE key = 'athlete_name'",
   ]);
 }
@@ -826,7 +828,8 @@ export async function getAthleteThresholds(): Promise<AthleteThresholds> {
   const row = await one<AthleteThresholdsRow>(
     `SELECT max_hr, resting_hr, lthr, threshold_pace_s_per_km, ftp_w,
             resting_hr_estimated, ftp_provisional, updated_at
-     FROM athlete_thresholds WHERE id = 1`
+     FROM athlete_thresholds WHERE id = ?`,
+    [currentAthlete().id]
   );
   if (!row) return { ...THRESHOLD_DEFAULTS };
   return {
@@ -856,7 +859,7 @@ export async function saveAthleteThresholds(fields: AthleteThresholdFields): Pro
     `INSERT INTO athlete_thresholds
        (id, max_hr, resting_hr, lthr, threshold_pace_s_per_km, ftp_w,
         resting_hr_estimated, ftp_provisional, updated_at)
-     VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        max_hr = excluded.max_hr,
        resting_hr = excluded.resting_hr,
@@ -867,6 +870,7 @@ export async function saveAthleteThresholds(fields: AthleteThresholdFields): Pro
        ftp_provisional = excluded.ftp_provisional,
        updated_at = excluded.updated_at`,
     [
+      requireAthlete().id,
       fields.maxHr,
       fields.restingHr,
       fields.lthr,

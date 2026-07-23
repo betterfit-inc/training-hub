@@ -1,7 +1,7 @@
 /**
  * Seed script: inserts fake activities in mixed statuses so the UI can be
  * evaluated without a Strava connection. Uses the real shoes created by
- * migration 002 and never touches them or their baselines.
+ * migration 5 (baseline seed) and never touches them or their baselines.
  *
  *   npm run seed        insert (re-runs replace previous seed data)
  *   npm run seed:clear  remove only seeded activities

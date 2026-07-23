@@ -44,6 +44,8 @@ DONE = committed, verify green · SKIPPED = intentionally not done (reason) · B
 
 | T2.4 | Name magic numbers | DONE | _(this commit)_ | green | `fitness.ts`: `TSS_SCALE=100`, `SECONDS_PER_HOUR/MINUTE`, `RPE_TSS_FACTOR=0.25`, `TSB_FRESH_ABOVE/NEUTRAL_FLOOR/PRODUCTIVE_FLOOR`. `db.ts`: `DEFAULT_RETIREMENT_KM=700` (DDL interpolates it), `WRITE_CHUNK=200`. `races.ts`: named distance-band boundaries with shared edges. Values identical; engine tests unchanged and green. |
 
+| T2.7 | Migration versioning (`schema_version` + ordered registry) | DONE | _(this commit)_ | green | Replaced the `pragma_table_info`-inferred applied-state with an ordered `MIGRATIONS` registry (versions 1–5, sequential, matching execution order) tracked by a single-row `schema_version` table. Every step idempotent (`CREATE TABLE IF NOT EXISTS`, guarded ADD COLUMN, empty-only seed). Verified schema+seed equivalence against a **copy** of the real 1229-activity `data/app.db` (original never mutated) — identical except the intended `schema_version` addition; idempotent re-run leaves zero duplication. No `PRAGMA foreign_keys` (that's T3.1). |
+
 **M1 seams checkpoint:** full `npm run verify` (incl. 6 Playwright e2e) re-run by the orchestrator after T1.1–T1.5 — green.
 
 **M0 acceptance met:** `npm run verify` is green on `build/overnight` (independently re-run by the orchestrator, exit 0, incl. 6 Playwright specs), runs against a local sqlite file only, and CI is wired to run it on every PR.

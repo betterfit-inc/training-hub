@@ -1,3 +1,31 @@
+# Build log — Health, Readiness & Recovery layer
+
+Branch: `feature/health-readiness` off `main`. Autonomous, unattended run per `docs/health-readiness/PLAN.md`. **Nothing is merged** until the single PR to `main` (the Cubic review gate). `npm run verify` is kept green after every step; commits are small and self-validated.
+
+The prior-phase log (Phase 3) is preserved below this section.
+
+## Decisions taken (autonomous — no owner questions)
+
+- **`health_metrics` schema.** One row per `(date, metric, source)`, `UNIQUE(date, metric, source)`. Stores exactly one of `value REAL` (numeric metrics + 0/1 flags) or `value_text TEXT` (categorical labels like `hrv_status`, device training status). Rationale: the plan says `value REAL (or a small typed value)`; a second `value_text` column keeps a categorical reading in the SAME cohesive row rather than splitting metrics into two tables or encoding labels as magic numbers. Migration `7` (idempotent, ordered registry). Indexed by `(date)` and `(metric, date)`.
+- **Metric union (types.ts).** The plan's list, plus device-native reference metrics `device_readiness`, `device_recovery_hours`, `device_training_status` (shown alongside ours, never canonical), and `hrv_status`. Subjective set: `fatigue|soreness|stress_subjective|mood` (1–5 Hooper scale) + `sickness|injury` (0/1 flags).
+- **Source resolver** lives once in the pure `src/lib/health.ts`: `SOURCE_PRIORITY` device(3) > manual(2) > computed(1), ties broken by most-recent `recorded_at`. Made a single knob so a user-overridable precedence is a one-line change later.
+- **Ingest auth** = shared machine token in `Authorization: Bearer`, checked constant-time against `HEALTH_INGEST_SECRET` (reuses `crypto.ts`). Unconfigured secret = endpoint CLOSED (503), never open. Path allowlisted in `src/proxy.ts` so the owner-session page gate does not block the machine caller (the route is its own guard).
+- **Idempotent ingest** = delete-then-insert of a `(date, source)`'s rows in one atomic write batch, so a re-sync overwrites in place and a metric that drops out of a later snapshot leaves no stale row. A manual row for the same metric/day is untouched (different source).
+
+## Open questions (for the PR / owner)
+
+- Garmin first-login MFA is a one-time interactive step that cannot run headless — the sync service + Action are built and documented; the token bootstrap is the single manual step (see `services/garmin-sync/README.md`).
+- Readiness/recovery constants are defensible defaults from the research doc, NOT tuned to this athlete's data yet — flagged in code as needing real-data tuning.
+
+## Steps
+
+| Step | Status | Notes |
+|---|---|---|
+| Domain model + migration 7 + `db/health.ts` + resolver | DONE (verify green) | `types.ts` unions; pure `health.ts` (metadata + resolver + snapshot normalizer, 15 unit tests); `db/health.ts` query helpers through the plain-object seam; migration 7. |
+| Ingest endpoint `POST /api/health/ingest` + machine token | DONE (verify green) | Route handler (thin: parse → authorize → normalize → idempotent upsert); proxy allowlist; `.env.example` doc; 7 route tests (auth 401/503, bad JSON/date/source 400, persist, idempotency, manual-preserved). |
+
+---
+
 # Overnight build log — Phase 3 (M0–M3 + auth)
 
 Branch: `build/overnight` off `main`. Autonomous, unattended run. **Nothing is merged** — this PR is the review gate.

@@ -248,6 +248,34 @@ const MIGRATIONS: Migration[] = [
       await addColumnIfMissing("activities", "started_at_local", "TEXT");
     },
   },
+  // 7: source-agnostic daily health metrics. One row per (date, metric, source):
+  // multiple sources may coexist for the same day+metric (device + manual), and a
+  // resolver picks the preferred one. Exactly one of value / value_text carries
+  // the reading. The UNIQUE(date, metric, source) constraint is what makes ingest
+  // upserts idempotent, so re-running a day's sync overwrites in place.
+  {
+    version: 7,
+    up: async () => {
+      await client.batch(
+        [
+          `CREATE TABLE IF NOT EXISTS health_metrics (
+             id INTEGER PRIMARY KEY,
+             date TEXT NOT NULL,
+             metric TEXT NOT NULL,
+             value REAL,
+             value_text TEXT,
+             unit TEXT,
+             source TEXT NOT NULL,
+             recorded_at TEXT,
+             UNIQUE(date, metric, source)
+           )`,
+          "CREATE INDEX IF NOT EXISTS idx_health_metrics_date ON health_metrics(date)",
+          "CREATE INDEX IF NOT EXISTS idx_health_metrics_metric_date ON health_metrics(metric, date)",
+        ],
+        "write"
+      );
+    },
+  },
 ];
 
 async function currentSchemaVersion(): Promise<number> {

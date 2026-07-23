@@ -281,12 +281,15 @@ export const en = {
   coach: {
     title: "AI coach",
     subtitle: "Ask about this workout. The coach sees its metrics, your load and your form.",
-    placeholder: "Ask the coach about this workout...",
+    placeholder: "Ask the coach, or attach a screenshot to read...",
     send: "Send",
     clear: "Clear",
     thinking: "Thinking...",
     notConfigured: "Set ANTHROPIC_API_KEY to enable the AI coach.",
     empty: "No messages yet. Ask the coach anything about this session.",
+    attachImage: "Attach image",
+    removeImage: "Remove image",
+    imageSent: "📷 Image sent",
   },
   digest: {
     title: "Weekly digest",

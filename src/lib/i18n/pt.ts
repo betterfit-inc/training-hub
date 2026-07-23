@@ -276,12 +276,15 @@ export const pt: Dict = {
   coach: {
     title: "Treinador de IA",
     subtitle: "Pergunte sobre este treino. O treinador vê as métricas, sua carga e sua forma.",
-    placeholder: "Pergunte ao treinador sobre este treino...",
+    placeholder: "Pergunte ao treinador, ou anexe um print para ele ler...",
     send: "Enviar",
     clear: "Limpar",
     thinking: "Pensando...",
     notConfigured: "Defina ANTHROPIC_API_KEY para ativar o treinador de IA.",
     empty: "Nenhuma mensagem ainda. Pergunte qualquer coisa ao treinador sobre esta sessão.",
+    attachImage: "Anexar imagem",
+    removeImage: "Remover imagem",
+    imageSent: "📷 Imagem enviada",
   },
   digest: {
     title: "Resumo semanal",

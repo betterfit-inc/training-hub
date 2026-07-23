@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { NONE } from "./constants";
 import { splitErrorText, isLang } from "./i18n";
 import { LANG_COOKIE, getLang } from "./lang";
-import { storePhoto, deletePhoto, InvalidImageError } from "./storage";
+import { storePhoto, deletePhoto, sniffImageType, InvalidImageError } from "./storage";
 import {
   addActivityChatMessage,
   clearActivityChat,
@@ -58,6 +58,7 @@ import {
   runReadinessSummary,
   runWeeklyDigest,
   summarizeStreams,
+  type CoachImage,
   type CoachLoad,
   type CoachReadiness,
   type CoachStreamSummary,
@@ -652,15 +653,43 @@ export type CoachMessageResult = { ok: true; reply: string } | { ok: false; erro
 export type WeeklyDigestResult =
   { ok: true; text: string; generatedAt: string } | { ok: false; error: string };
 
+// Max decoded size of an attached coach image (the client downscales first, so
+// this is generous headroom, not the expected size).
+const COACH_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+
 export async function sendCoachMessageAction(input: {
   activityId: number;
   message: string;
+  /** Optional attached image as raw base64 (no data: prefix). */
+  imageBase64?: string | null;
 }): Promise<CoachMessageResult> {
   const t = await dict();
   if (!(await requireAuth())) return { ok: false, error: t.errors.unauthorized };
   if (!isCoachConfigured()) return { ok: false, error: t.errors.coachNotConfigured };
   const message = input.message.trim();
-  if (!message) return { ok: false, error: t.errors.generic };
+  const imageBase64 = input.imageBase64?.trim() || null;
+  if (!message && !imageBase64) return { ok: false, error: t.errors.generic };
+
+  // Validate the image by MAGIC NUMBER (never the client's word), and only allow
+  // the types Anthropic vision accepts. Reject anything else or oversized.
+  let image: CoachImage | null = null;
+  if (imageBase64) {
+    const bytes = Buffer.from(imageBase64, "base64");
+    if (bytes.length === 0 || bytes.length > COACH_IMAGE_MAX_BYTES) {
+      return { ok: false, error: t.errors.invalidImage };
+    }
+    const mime = sniffImageType(bytes);
+    if (
+      mime !== "image/jpeg" &&
+      mime !== "image/png" &&
+      mime !== "image/gif" &&
+      mime !== "image/webp"
+    ) {
+      return { ok: false, error: t.errors.invalidImage };
+    }
+    image = { mediaType: mime, dataBase64: imageBase64 };
+  }
+
   try {
     const activity = await getActivity(input.activityId);
     if (!activity) return { ok: false, error: t.errors.activityNotFound };
@@ -714,8 +743,14 @@ export async function sendCoachMessageAction(input: {
       content: row.content,
     }));
 
-    await addActivityChatMessage(activity.id, "user", message);
-    const reply = await runCoachChat(context, history, message);
+    // The image is used for this turn but not persisted in the text history; the
+    // stored user line notes an image when there is no accompanying text.
+    const userLine = message || t.coach.imageSent;
+    const prompt =
+      message ||
+      "Interpret this attached screenshot and relate it to this workout and my training.";
+    await addActivityChatMessage(activity.id, "user", userLine);
+    const reply = await runCoachChat(context, history, prompt, image);
     await addActivityChatMessage(activity.id, "assistant", reply);
     refreshAll();
     return { ok: true, reply };

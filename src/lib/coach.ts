@@ -299,6 +299,8 @@ The athlete's message is preceded by a context block with this workout's metrics
 
 Be concise, specific, and actionable. Use metric units. Write pace as m:ss/km. No filler, no motivational fluff, no restating the whole workout back. If a piece of data is missing, say so briefly instead of inventing it.
 
+If the athlete attaches an image (for example a screenshot from TrainingPeaks, Garmin or another tool), read the data in it — numbers, charts, splits, plans — and factor it into your answer, tying it back to this workout and their fitness. If the image is unrelated or unreadable, say so briefly.
+
 Write in plain prose and, where helpful, simple hyphen ("- ") bullet lines. Do NOT use Markdown syntax: no "#" headings, no "*"/"**" bold or italics, no backticks, no tables. The reply is shown as plain text, so any Markdown markers would appear literally.`;
 
 const DIGEST_SYSTEM_PROMPT = `You are an experienced endurance coach writing a short weekly training digest for the athlete you are talking to.
@@ -329,15 +331,35 @@ function extractText(res: Anthropic.Message): string {
     .trim();
 }
 
+/** An image the athlete attached to a coach message (e.g. a TrainingPeaks or
+ * Garmin screenshot), for the model to read. Restricted to the types Anthropic
+ * vision accepts; the base64 is the raw data (no data: URL prefix). */
+export interface CoachImage {
+  mediaType: "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+  dataBase64: string;
+}
+
 export async function runCoachChat(
   context: string,
   history: { role: "user" | "assistant"; content: string }[],
-  userMessage: string
+  userMessage: string,
+  image?: CoachImage | null
 ): Promise<string> {
+  // The latest turn carries the text plus, when present, an image block so the
+  // model can interpret a screenshot (splits, a plan, a device screen, etc.).
+  const latest: Anthropic.ContentBlockParam[] = [];
+  if (image) {
+    latest.push({
+      type: "image",
+      source: { type: "base64", media_type: image.mediaType, data: image.dataBase64 },
+    });
+  }
+  latest.push({ type: "text", text: userMessage });
+
   const messages: Anthropic.MessageParam[] = [
     { role: "user", content: `Context for the workout we are discussing:\n\n${context}` },
     ...history,
-    { role: "user", content: userMessage },
+    { role: "user", content: latest },
   ];
   const res = await getClient().messages.create({
     model: COACH_MODEL,

@@ -47,6 +47,7 @@ const NAV = [
   { href: "/", key: "log" },
   { href: "/insights", key: "insights" },
   { href: "/fitness", key: "fitness" },
+  { href: "/performance", key: "performance" },
   { href: "/races", key: "races" },
   { href: "/review", key: "review" },
   { href: "/shoes", key: "shoes" },

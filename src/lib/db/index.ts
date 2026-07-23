@@ -8,3 +8,4 @@ export * from "./activities";
 export * from "./strava-auth";
 export * from "./load";
 export * from "./coach";
+export * from "./benchmarks";

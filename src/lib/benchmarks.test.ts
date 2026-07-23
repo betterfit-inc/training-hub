@@ -1,0 +1,145 @@
+import { describe, expect, it } from "vitest";
+import {
+  bestEffortsByDistance,
+  estimateCriticalSpeed,
+  pickReferenceEffort,
+  predictRaceTimes,
+  RIEGEL_FATIGUE_EXPONENT,
+  type RunEffort,
+} from "@/lib/benchmarks";
+
+function effort(overrides: Partial<RunEffort> = {}): RunEffort {
+  return {
+    distanceKm: 10,
+    movingTimeS: 2400,
+    isRace: false,
+    name: null,
+    date: null,
+    ...overrides,
+  };
+}
+
+describe("bestEffortsByDistance", () => {
+  it("picks the fastest whole-activity effort at each distance", () => {
+    const efforts = [
+      effort({ distanceKm: 5, movingTimeS: 1200 }), // 5k in 20:00
+      effort({ distanceKm: 5, movingTimeS: 1140 }), // 5k in 19:00 (faster)
+      effort({ distanceKm: 10, movingTimeS: 2520 }), // 10k in 42:00
+    ];
+    const best = bestEffortsByDistance(efforts);
+
+    expect(best.map((b) => b.distance)).toEqual(["5k", "10k"]);
+    const fiveK = best.find((b) => b.distance === "5k");
+    expect(fiveK?.movingTimeS).toBe(1140);
+    const tenK = best.find((b) => b.distance === "10k");
+    expect(tenK?.movingTimeS).toBe(2520);
+  });
+
+  it("excludes trail-named and sub-distance efforts", () => {
+    const best = bestEffortsByDistance([
+      effort({ distanceKm: 10, movingTimeS: 2520, name: "Serra Trail Run" }),
+    ]);
+    expect(best).toEqual([]);
+  });
+});
+
+describe("estimateCriticalSpeed", () => {
+  // Two maximal race efforts define the line exactly:
+  //   5 km in 20:00        -> (1200 s, 5000 m)
+  //   half in 1:35:00      -> (5700 s, 21097.5 m)
+  // CS  = (21097.5 - 5000) / (5700 - 1200) = 16097.5 / 4500 = 3.57722 m/s
+  // D'  = 5000 - CS*1200 = 707.33 m
+  // pace = 1000 / CS = 279.55 s/km
+  it("fits CS, D' and threshold pace from two race distances", () => {
+    const result = estimateCriticalSpeed([
+      effort({ distanceKm: 5, movingTimeS: 1200, isRace: true }),
+      effort({ distanceKm: 21.0975, movingTimeS: 5700, isRace: true }),
+    ]);
+
+    expect(result).not.toBeNull();
+    expect(result!.cs).toBeCloseTo(3.5772, 3);
+    expect(result!.dPrime).toBeCloseTo(707.33, 1);
+    expect(result!.thresholdPaceSPerKm).toBeCloseTo(279.55, 1);
+    expect(result!.rSquared).toBeCloseTo(1, 6);
+    expect(result!.points).toHaveLength(2);
+  });
+
+  it("returns null with fewer than two distinct race distances", () => {
+    // One race distance plus a faster NON-race effort at another distance:
+    // non-race efforts are ignored, leaving a single race distance.
+    const result = estimateCriticalSpeed([
+      effort({ distanceKm: 10, movingTimeS: 2400, isRace: true }),
+      effort({ distanceKm: 5, movingTimeS: 1000, isRace: false }),
+    ]);
+    expect(result).toBeNull();
+  });
+
+  it("returns null when two races share the same distance", () => {
+    const result = estimateCriticalSpeed([
+      effort({ distanceKm: 5, movingTimeS: 1200, isRace: true }),
+      effort({ distanceKm: 5.05, movingTimeS: 1180, isRace: true }),
+    ]);
+    expect(result).toBeNull();
+  });
+
+  it("ignores non-race efforts so easy runs do not bias the fit", () => {
+    const races = [
+      effort({ distanceKm: 5, movingTimeS: 1200, isRace: true }),
+      effort({ distanceKm: 21.0975, movingTimeS: 5700, isRace: true }),
+    ];
+    const withEasyRun = [...races, effort({ distanceKm: 10, movingTimeS: 3600, isRace: false })];
+
+    const racesOnly = estimateCriticalSpeed(races);
+    const withRun = estimateCriticalSpeed(withEasyRun);
+    expect(withRun!.cs).toBeCloseTo(racesOnly!.cs, 6);
+    expect(withRun!.points).toHaveLength(2);
+  });
+});
+
+describe("predictRaceTimes (Riegel)", () => {
+  // From a 10k in 40:00 (2400 s), predict a half marathon:
+  //   t2 = 2400 * (21097.5 / 10000)^1.06 = 5295.37 s (~1:28:15)
+  it("predicts a half-marathon time from a 10k reference", () => {
+    const [half] = predictRaceTimes({ distanceKm: 10, movingTimeS: 2400 }, ["half"]);
+    expect(half.distance).toBe("half");
+    expect(half.predictedTimeS).toBeCloseTo(5295.37, 1);
+    // pace = 5295.37 / 21.0975 km ~= 251.0 s/km
+    expect(half.paceSPerKm).toBeCloseTo(251.0, 0);
+  });
+
+  it("uses the named 1.06 fatigue exponent", () => {
+    const [tenK] = predictRaceTimes({ distanceKm: 5, movingTimeS: 1200 }, ["10k"]);
+    const expected = 1200 * Math.pow(10000 / 5000, RIEGEL_FATIGUE_EXPONENT);
+    expect(tenK.predictedTimeS).toBeCloseTo(2501.92, 1);
+    expect(tenK.predictedTimeS).toBeCloseTo(expected, 6);
+  });
+
+  it("returns [] for a reference with no distance or time", () => {
+    expect(predictRaceTimes({ distanceKm: 0, movingTimeS: 1200 })).toEqual([]);
+    expect(predictRaceTimes({ distanceKm: 10, movingTimeS: 0 })).toEqual([]);
+  });
+});
+
+describe("pickReferenceEffort", () => {
+  it("prefers the fastest race over a faster easy run", () => {
+    const ref = pickReferenceEffort([
+      effort({ distanceKm: 5, movingTimeS: 1000, isRace: false, name: "Fast interval block" }),
+      effort({ distanceKm: 10, movingTimeS: 2400, isRace: true, name: "10k race" }),
+      effort({ distanceKm: 21.0975, movingTimeS: 5700, isRace: true, name: "Half race" }),
+    ]);
+    // Races only: 10k @ 240 s/km beats the half @ ~270 s/km.
+    expect(ref?.name).toBe("10k race");
+  });
+
+  it("falls back to the fastest standard-distance run when there are no races", () => {
+    const ref = pickReferenceEffort([
+      effort({ distanceKm: 10, movingTimeS: 2700, name: "Easy" }),
+      effort({ distanceKm: 10, movingTimeS: 2400, name: "Tempo" }),
+    ]);
+    expect(ref?.name).toBe("Tempo");
+  });
+
+  it("returns null when there is no standard-distance effort", () => {
+    expect(pickReferenceEffort([])).toBeNull();
+  });
+});

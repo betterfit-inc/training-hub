@@ -1,16 +1,33 @@
 # GitGuardian configuration.
 #
-# The two entries below are THROWAWAY end-to-end test fixtures, not real
-# credentials. They configure the auth boundary for the Playwright e2e server,
-# which runs locally against an isolated SQLite test DB (data/e2e.db) with no
-# network access. They gate nothing real and are safe to keep in the repo; they
-# are allowlisted here so the secret scanner does not flag intentional test data.
-# Production sets AUTH_PASSWORD / AUTH_SECRET via environment variables (see
-# .env.example); those are never committed.
+# The entries below are THROWAWAY test fixtures, not real credentials:
+#  - unit tests in src/lib/*.test.ts stub AUTH_PASSWORD / AUTH_SECRET to fake
+#    values to exercise the auth boundary (no network, no real account);
+#  - playwright.config.ts sets fake AUTH_* for the local e2e server, which runs
+#    against an isolated SQLite test DB.
+# None of these gate anything real. Production sets AUTH_PASSWORD / AUTH_SECRET
+# via environment variables (see .env.example); those are never committed.
+# Test/config paths are excluded from secret scanning and the specific fake
+# values are allowlisted so intentional test data is not reported as a secret.
 version: 2
 secret:
+  ignored-paths:
+    - "src/**/*.test.ts"
+    - "src/**/*.test.tsx"
+    - "playwright.config.ts"
+    - "e2e/**"
   ignored-matches:
-    - name: "e2e test AUTH_PASSWORD (throwaway, local test DB only)"
+    - name: "test AUTH_PASSWORD fixture (unit tests)"
+      match: "correct horse battery staple"
+    - name: "test AUTH_SECRET fixture (unit tests)"
+      match: "test-signing-secret-0123456789"
+    - name: "test AUTH_PASSWORD fixture (verifyPassword unit test)"
+      match: "s3cret"
+    - name: "test AUTH_SECRET fixture (sign/verify unit test)"
+      match: "signing-secret"
+    - name: "test AUTH_SECRET fixture (foreign-secret unit test)"
+      match: "different-secret"
+    - name: "e2e AUTH_PASSWORD fixture (playwright)"
       match: "e2e-owner-password"
-    - name: "e2e test AUTH_SECRET (throwaway, local test DB only)"
+    - name: "e2e AUTH_SECRET fixture (playwright)"
       match: "e2e-signing-secret-please-do-not-reuse"

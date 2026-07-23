@@ -61,6 +61,9 @@ export interface Activity {
   bike_name: string | null;
   is_race: boolean;
   goal_pace_s_per_km: number | null;
+  // AI coach insight for this workout (generated on demand), and when.
+  coach_insight: string | null;
+  coach_insight_at: string | null;
   created_at: string;
 }
 

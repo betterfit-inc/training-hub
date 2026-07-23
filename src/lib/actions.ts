@@ -49,6 +49,8 @@ import {
   getRunningFieldSignals,
   setTrainingZones,
   getTrainingZones,
+  listSimilarActivities,
+  setActivityInsight,
   type BikeFields,
   type ShoeFields,
 } from "./db";
@@ -58,10 +60,12 @@ import { fmtHoursMin, localDateInputValue } from "./format";
 import {
   buildActivityContext,
   buildDigestContext,
+  buildInsightContext,
   buildReadinessContext,
   buildZonesContext,
   deriveZones,
   isCoachConfigured,
+  runActivityInsight,
   runCoachChat,
   runReadinessSummary,
   runWeeklyDigest,
@@ -1045,6 +1049,105 @@ export async function computeZonesAction(extraContext = ""): Promise<ZonesResult
     await setTrainingZones(zones);
     refreshAll();
     return { ok: true, zones };
+  } catch (error) {
+    return fail(error, t.errors.coachFailed);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Per-activity coach insight — an upfront read generated on demand, stored on
+// the activity and shown above the chat.
+// ---------------------------------------------------------------------------
+
+export type InsightResult =
+  { ok: true; text: string; generatedAt: string } | { ok: false; error: string };
+
+export async function generateActivityInsightAction(activityId: number): Promise<InsightResult> {
+  const t = await dict();
+  if (!(await requireAuth())) return { ok: false, error: t.errors.unauthorized };
+  if (!isCoachConfigured()) return { ok: false, error: t.errors.coachNotConfigured };
+  try {
+    const activity = await getActivity(activityId);
+    if (!activity) return { ok: false, error: t.errors.activityNotFound };
+
+    const thresholds = await getAthleteThresholds();
+    const stored = await getActivityLoad(activity.id);
+    let load: CoachLoad | null = null;
+    if (stored) {
+      load = { tss: stored.tss, method: stored.method, intensityFactor: stored.intensity_factor };
+    } else {
+      const computed = computeLoad(activity, thresholds);
+      if (computed) {
+        load = {
+          tss: computed.tss,
+          method: computed.method,
+          intensityFactor: computed.intensityFactor,
+        };
+      }
+    }
+
+    let streams: CoachStreamSummary | null = null;
+    try {
+      const raw = await ensureActivityStreams(activity);
+      if (raw) streams = summarizeStreams(raw);
+    } catch {
+      streams = null;
+    }
+
+    const [pmc, goals, zones, similar] = await Promise.all([
+      buildPmc(),
+      listGoals(),
+      getTrainingZones(),
+      listSimilarActivities(activity),
+    ]);
+
+    const activityContext = buildActivityContext({
+      activity,
+      load,
+      thresholds,
+      pmc: pmcPoint(pmc[pmc.length - 1]),
+      streams,
+      journal: {
+        rpe: activity.rpe,
+        feeling: activity.feeling,
+        workoutNotes: activity.workout_notes,
+        healthNotes: activity.health_notes,
+      },
+      goals,
+      zones,
+    });
+
+    // Health around the day of the workout, when we have it.
+    const day = (activity.started_at_local ?? activity.started_at)?.slice(0, 10) ?? null;
+    let healthNote: string | null = null;
+    if (day) {
+      const rows = await getResolvedMetricsForDate(day);
+      const pick = (metric: string) => rows.find((r) => r.metric === metric)?.value ?? null;
+      const parts = [
+        pick("hrv_overnight") != null ? `HRV ${pick("hrv_overnight")} ms` : null,
+        pick("resting_hr") != null ? `resting HR ${pick("resting_hr")} bpm` : null,
+        pick("sleep_total") != null
+          ? `sleep ${fmtHoursMin((pick("sleep_total") as number) * 60)}`
+          : null,
+        pick("stress_avg") != null ? `stress ${pick("stress_avg")}` : null,
+      ].filter(Boolean);
+      if (parts.length > 0) healthNote = parts.join(", ");
+    }
+
+    const similarSessions = similar.map((s) => ({
+      date: s.date,
+      name: s.name,
+      distanceKm: s.distance_km,
+      paceSPerKm: s.avg_pace_s_per_km,
+      avgHr: s.avg_hr,
+      tss: s.tss,
+    }));
+
+    const context = buildInsightContext({ activityContext, similar: similarSessions, healthNote });
+    const text = await runActivityInsight(context);
+    await setActivityInsight(activity.id, text);
+    refreshAll();
+    return { ok: true, text, generatedAt: new Date().toISOString() };
   } catch (error) {
     return fail(error, t.errors.coachFailed);
   }

@@ -295,6 +295,14 @@ const MIGRATIONS: Migration[] = [
       );
     },
   },
+  // 9: per-activity AI coach insight (generated on demand, shown above the chat).
+  {
+    version: 9,
+    up: async () => {
+      await addColumnIfMissing("activities", "coach_insight", "TEXT");
+      await addColumnIfMissing("activities", "coach_insight_at", "TEXT");
+    },
+  },
 ];
 
 async function currentSchemaVersion(): Promise<number> {

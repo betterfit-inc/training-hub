@@ -292,6 +292,12 @@ export const en = {
     attachImage: "Attach image",
     removeImage: "Remove image",
     imageSent: "📷 Image sent",
+    insightTitle: "Coach insight",
+    insightEmpty:
+      "Get an upfront read on this workout — how it compares to similar sessions, your health and your goals.",
+    insightGenerate: "Generate insight",
+    insightRegenerate: "Regenerate insight",
+    insightGenerating: "Analyzing this workout…",
   },
   digest: {
     title: "Weekly digest",

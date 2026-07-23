@@ -408,6 +408,7 @@ export default async function ActivityPage({ params }: PageProps<"/activity/[id]
           <CoachChat
             activityId={activity.id}
             messages={coachMessages}
+            insight={activity.coach_insight}
             configured={coachConfigured}
           />
         </CardContent>

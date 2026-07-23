@@ -221,6 +221,60 @@ export async function updateActivityJournal(id: number, journal: JournalFields):
   );
 }
 
+export interface SimilarActivity {
+  date: string;
+  name: string | null;
+  distance_km: number | null;
+  avg_pace_s_per_km: number | null;
+  avg_hr: number | null;
+  tss: number | null;
+}
+
+/**
+ * Recent confirmed sessions like a given one (same sport, comparable distance),
+ * for the insight to compare against. Excludes the activity itself and anything
+ * after it, so a past workout's insight only looks at what preceded it.
+ */
+export async function listSimilarActivities(activity: {
+  id: number;
+  sport_type: string | null;
+  distance_km: number | null;
+  started_at: string | null;
+}): Promise<SimilarActivity[]> {
+  const lo = activity.distance_km != null ? activity.distance_km * 0.75 : null;
+  const hi = activity.distance_km != null ? activity.distance_km * 1.25 : null;
+  return many<SimilarActivity>(
+    `SELECT a.started_at AS date, a.name, a.distance_km, a.avg_pace_s_per_km, a.avg_hr, l.tss
+     FROM activities a
+     LEFT JOIN activity_load l ON l.activity_id = a.id
+     WHERE a.status = 'confirmed'
+       AND a.id != ?
+       AND LOWER(COALESCE(a.sport_type,'')) = LOWER(COALESCE(?, ''))
+       AND a.started_at IS NOT NULL
+       AND (? IS NULL OR a.started_at < ?)
+       AND (? IS NULL OR (a.distance_km >= ? AND a.distance_km <= ?))
+     ORDER BY a.started_at DESC
+     LIMIT 6`,
+    [
+      activity.id,
+      activity.sport_type,
+      activity.started_at,
+      activity.started_at,
+      lo,
+      lo ?? 0,
+      hi ?? 0,
+    ]
+  );
+}
+
+export async function setActivityInsight(id: number, text: string): Promise<void> {
+  await exec("UPDATE activities SET coach_insight = ?, coach_insight_at = ? WHERE id = ?", [
+    text,
+    new Date().toISOString(),
+    id,
+  ]);
+}
+
 export async function replaceActivitySplits(id: number, splits: SplitInput[]): Promise<void> {
   await batchWrite([
     { sql: DELETE_SPLITS_SQL, args: [id] },

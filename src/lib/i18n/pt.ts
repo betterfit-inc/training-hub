@@ -287,6 +287,12 @@ export const pt: Dict = {
     attachImage: "Anexar imagem",
     removeImage: "Remover imagem",
     imageSent: "📷 Imagem enviada",
+    insightTitle: "Insight do treinador",
+    insightEmpty:
+      "Receba uma leitura inicial deste treino — como ele se compara a sessões similares, sua saúde e suas metas.",
+    insightGenerate: "Gerar insight",
+    insightRegenerate: "Gerar de novo",
+    insightGenerating: "Analisando este treino…",
   },
   digest: {
     title: "Resumo semanal",

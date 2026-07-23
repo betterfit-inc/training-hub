@@ -2,12 +2,16 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ImagePlusIcon, Loader2Icon, SendIcon, XIcon } from "lucide-react";
+import { ImagePlusIcon, Loader2Icon, SendIcon, SparklesIcon, XIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useI18n } from "@/components/i18n-provider";
-import { clearCoachAction, sendCoachMessageAction } from "@/lib/actions";
+import {
+  clearCoachAction,
+  generateActivityInsightAction,
+  sendCoachMessageAction,
+} from "@/lib/actions";
 
 export interface CoachMessage {
   role: "user" | "assistant";
@@ -54,22 +58,38 @@ async function toDownscaledJpeg(file: File): Promise<Attachment> {
 export function CoachChat({
   activityId,
   messages: initial,
+  insight: initialInsight,
   configured,
 }: {
   activityId: number;
   messages: CoachMessage[];
+  insight: string | null;
   configured: boolean;
 }) {
   const router = useRouter();
   const { t } = useI18n();
   const [messages, setMessages] = useState<CoachMessage[]>(initial);
+  const [insight, setInsight] = useState<string | null>(initialInsight);
   const [input, setInput] = useState("");
   const [attachment, setAttachment] = useState<Attachment | null>(null);
   const [pending, startTransition] = useTransition();
+  const [insightPending, startInsight] = useTransition();
   const fileRef = useRef<HTMLInputElement>(null);
 
   if (!configured) {
     return <p className="text-sm text-muted-foreground/70">{t.coach.notConfigured}</p>;
+  }
+
+  function generateInsight() {
+    startInsight(async () => {
+      const result = await generateActivityInsightAction(activityId);
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      setInsight(result.text);
+      router.refresh();
+    });
   }
 
   async function onFile(event: React.ChangeEvent<HTMLInputElement>) {
@@ -126,6 +146,36 @@ export function CoachChat({
 
   return (
     <div className="space-y-4">
+      <div className="rounded-xl border bg-muted/30 p-3.5">
+        <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium tracking-wider text-muted-foreground uppercase">
+          <SparklesIcon className="size-3.5 text-primary" aria-hidden />
+          {t.coach.insightTitle}
+        </div>
+        {insight ? (
+          <p className="text-sm leading-relaxed whitespace-pre-wrap">{insight}</p>
+        ) : (
+          <p className="text-sm text-muted-foreground/80">{t.coach.insightEmpty}</p>
+        )}
+        <Button
+          variant={insight ? "ghost" : "default"}
+          size="sm"
+          className="mt-2.5"
+          onClick={generateInsight}
+          disabled={insightPending}
+        >
+          {insightPending ? (
+            <Loader2Icon className="animate-spin" data-icon="inline-start" />
+          ) : (
+            <SparklesIcon data-icon="inline-start" />
+          )}
+          {insightPending
+            ? t.coach.insightGenerating
+            : insight
+              ? t.coach.insightRegenerate
+              : t.coach.insightGenerate}
+        </Button>
+      </div>
+
       {messages.length > 0 ? (
         <div className="space-y-3">
           {messages.map((m, i) => (

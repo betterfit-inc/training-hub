@@ -580,3 +580,74 @@ export async function deriveZones(context: string): Promise<Omit<DerivedZones, "
   }
   return block.input as Omit<DerivedZones, "generatedAt">;
 }
+
+// ---------------------------------------------------------------------------
+// Per-activity insight — an upfront coach read on one workout, comparing it to
+// similar past sessions and the athlete's health/goals, shown above the chat.
+// ---------------------------------------------------------------------------
+
+export interface SimilarSession {
+  date: string | null;
+  name: string | null;
+  distanceKm: number | null;
+  paceSPerKm: number | null;
+  avgHr: number | null;
+  tss: number | null;
+}
+
+export function buildInsightContext(input: {
+  activityContext: string;
+  similar: SimilarSession[];
+  healthNote: string | null;
+}): string {
+  const { activityContext, similar, healthNote } = input;
+  const lines = [activityContext, ""];
+
+  lines.push("SIMILAR RECENT SESSIONS (same sport, comparable distance, before this one)");
+  if (similar.length === 0) {
+    lines.push("- None on record to compare against.");
+  } else {
+    for (const s of similar) {
+      const bits = [
+        s.distanceKm != null ? fmtKm(s.distanceKm, 1) : null,
+        s.paceSPerKm ? fmtPace(s.paceSPerKm) : null,
+        s.avgHr ? fmtHr(s.avgHr) : null,
+        s.tss != null ? `${Math.round(s.tss)} TSS` : null,
+      ].filter(Boolean);
+      lines.push(
+        `- ${fmtDateLong(s.date)}: ${s.name ?? "session"}${bits.length ? ` — ${bits.join(", ")}` : ""}`
+      );
+    }
+  }
+
+  if (healthNote) {
+    lines.push("");
+    lines.push("HEALTH AROUND THIS DAY");
+    lines.push(healthNote);
+  }
+
+  return lines.join("\n");
+}
+
+const INSIGHT_SYSTEM_PROMPT = `You are an experienced endurance coach giving an UPFRONT read on ONE workout the athlete just logged — the kind of short analysis they see before asking anything.
+
+You are given the workout's metrics, the athlete's thresholds/zones, their goals, similar recent sessions, and any health/readiness data. In 4-6 sentences or short hyphen bullets:
+- Say what this session was (which zone/effort) and how it compares to their similar recent sessions (faster/slower, higher/lower HR, more/less load).
+- Factor in health/readiness and the goal it serves.
+- End with ONE concrete, specific takeaway or next step.
+
+Ground everything in the real numbers; quote them. Be concise and specific, metric units, pace as m:ss/km. If data is missing, say so briefly rather than inventing it.
+
+Write plain prose and simple hyphen ("- ") bullet lines only. No Markdown syntax (no #, *, **, backticks, tables) — it is shown as plain text.`;
+
+export async function runActivityInsight(context: string): Promise<string> {
+  const res = await getClient().messages.create({
+    model: COACH_MODEL,
+    max_tokens: 1200,
+    thinking: { type: "adaptive" },
+    output_config: { effort: "medium" },
+    system: INSIGHT_SYSTEM_PROMPT,
+    messages: [{ role: "user", content: context }],
+  });
+  return extractText(res);
+}

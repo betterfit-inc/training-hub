@@ -27,6 +27,8 @@ function activity(overrides: Partial<Activity>): Activity {
     bike_name: null,
     is_race: false,
     goal_pace_s_per_km: null,
+    coach_insight: null,
+    coach_insight_at: null,
     created_at: "2026-01-01T00:00:00Z",
     ...overrides,
   };

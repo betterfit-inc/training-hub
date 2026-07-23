@@ -1,0 +1,16 @@
+# GitGuardian configuration.
+#
+# The two entries below are THROWAWAY end-to-end test fixtures, not real
+# credentials. They configure the auth boundary for the Playwright e2e server,
+# which runs locally against an isolated SQLite test DB (data/e2e.db) with no
+# network access. They gate nothing real and are safe to keep in the repo; they
+# are allowlisted here so the secret scanner does not flag intentional test data.
+# Production sets AUTH_PASSWORD / AUTH_SECRET via environment variables (see
+# .env.example); those are never committed.
+version: 2
+secret:
+  ignored-matches:
+    - name: "e2e test AUTH_PASSWORD (throwaway, local test DB only)"
+      match: "e2e-owner-password"
+    - name: "e2e test AUTH_SECRET (throwaway, local test DB only)"
+      match: "e2e-signing-secret-please-do-not-reuse"

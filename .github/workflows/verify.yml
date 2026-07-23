@@ -1,8 +1,9 @@
 name: verify
 
+# Run on every pull request (any base branch) so stacked PRs (e.g. a feature
+# branch targeting build/overnight) are gated too, not just PRs into main.
 on:
   pull_request:
-    branches: [main]
 
 jobs:
   verify:
@@ -15,4 +16,6 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
+      # `npm run typecheck` runs `next typegen` first (via the npm script), so
+      # Next's generated route types (PageProps, etc.) exist on a fresh checkout.
       - run: npm run verify

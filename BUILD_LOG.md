@@ -48,6 +48,8 @@ DONE = committed, verify green · SKIPPED = intentionally not done (reason) · B
 
 | T2.3 | Dedup `db.ts` | DONE | _(this commit)_ | green | Load-upsert 3→1 via `activityLoadUpsert({source, overrideManual})` — the divergent auto/manual/override semantics preserved as one parameterized template (verified SQL-equivalent). Gear-uniqueness UPDATE 6→1 via `clearGearFromOthers(table, gearId, exceptId?)`. Split-delete literal → one constant. All exported signatures + bound params unchanged; behavior-preserving. |
 
+| T2.11 | Query efficiency | DONE | _(this commit)_ | green | `attachSplits` now filters `WHERE activity_id IN (…)` (no whole-table scan); `BIKE_SELECT` computes mileage once via a `GROUP BY` aggregate join (was 4×/row); `recomputeAllLoads` fetches `raw_json` only for ride sports (blob skipped for runs/others — proven identical via 10-case `computeLoad` diff, since only the ride-gated power branch reads it); `countPending` wrapped in React `cache()` so `layout` + `page` share one query per request. All outputs proven byte-identical. |
+
 **M1 seams checkpoint:** full `npm run verify` (incl. 6 Playwright e2e) re-run by the orchestrator after T1.1–T1.5 — green.
 
 **M0 acceptance met:** `npm run verify` is green on `build/overnight` (independently re-run by the orchestrator, exit 0, incl. 6 Playwright specs), runs against a local sqlite file only, and CI is wired to run it on every PR.

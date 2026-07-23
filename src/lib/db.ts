@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { cache } from "react";
 import { createClient, type Client, type InStatement } from "@libsql/client";
 import { BASELINE_BIKES, BASELINE_SHOES, THRESHOLD_DEFAULTS } from "./baseline";
 import type { BlockActivity } from "./blocks";
@@ -493,22 +494,28 @@ export async function findShoeIdByGear(gearId: string): Promise<number | null> {
 // Bikes (one whole activity per bike, no splits; indoor = VirtualRide)
 // ---------------------------------------------------------------------------
 
-const BIKE_MILEAGE = `
-  SELECT COALESCE(SUM(a.distance_km), 0) AS total,
-    COALESCE(SUM(CASE WHEN a.sport_type = 'VirtualRide' THEN a.distance_km ELSE 0 END), 0) AS indoor,
-    COALESCE(SUM(CASE WHEN a.sport_type != 'VirtualRide' THEN a.distance_km ELSE 0 END), 0) AS outdoor,
-    COUNT(*) AS rides
-  FROM activities a
-  WHERE a.bike_id = b.id AND a.status = 'confirmed'
-`;
-
+// Each bike's confirmed-ride mileage aggregated ONCE (grouped by bike_id), then
+// LEFT JOINed so every derived column is read from a single computed row instead
+// of re-evaluating a correlated subquery per column. Bikes with no confirmed
+// rides get no match, so COALESCE(..., 0) reproduces the old empty-aggregate zeros
+// exactly (SUM over zero rows was NULL → 0; COUNT(*) was 0).
 const BIKE_SELECT = `
 SELECT b.*,
-  b.initial_km + (SELECT total FROM (${BIKE_MILEAGE})) AS current_km,
-  (SELECT indoor FROM (${BIKE_MILEAGE})) AS indoor_km,
-  (SELECT outdoor FROM (${BIKE_MILEAGE})) AS outdoor_km,
-  (SELECT rides FROM (${BIKE_MILEAGE})) AS ride_count
+  b.initial_km + COALESCE(m.total, 0) AS current_km,
+  COALESCE(m.indoor, 0) AS indoor_km,
+  COALESCE(m.outdoor, 0) AS outdoor_km,
+  COALESCE(m.rides, 0) AS ride_count
 FROM bikes b
+LEFT JOIN (
+  SELECT a.bike_id AS bike_id,
+    SUM(a.distance_km) AS total,
+    SUM(CASE WHEN a.sport_type = 'VirtualRide' THEN a.distance_km ELSE 0 END) AS indoor,
+    SUM(CASE WHEN a.sport_type != 'VirtualRide' THEN a.distance_km ELSE 0 END) AS outdoor,
+    COUNT(*) AS rides
+  FROM activities a
+  WHERE a.status = 'confirmed' AND a.bike_id IS NOT NULL
+  GROUP BY a.bike_id
+) m ON m.bike_id = b.id
 `;
 
 export async function listBikes(): Promise<BikeWithMileage[]> {
@@ -605,12 +612,18 @@ export async function setActivityRace(
 
 async function attachSplits(activities: Activity[]): Promise<ActivityWithSplits[]> {
   if (activities.length === 0) return [];
+  // Read only the splits for the activities in hand instead of the whole table.
+  // Placeholders are built from the count; values stay `?`-bound.
+  const ids = activities.map((a) => a.id);
+  const placeholders = ids.map(() => "?").join(", ");
   const all = await many<SplitWithShoe>(
     `SELECT sp.id, sp.activity_id, sp.shoe_id, sp.km, sp.note,
             s.name AS shoe_name, s.role AS shoe_role
      FROM activity_splits sp
      LEFT JOIN shoes s ON s.id = sp.shoe_id
-     ORDER BY sp.id`
+     WHERE sp.activity_id IN (${placeholders})
+     ORDER BY sp.id`,
+    ids
   );
   const byActivity = new Map<number, SplitWithShoe[]>();
   for (const split of all) {
@@ -638,12 +651,14 @@ export async function listPendingActivities(): Promise<ActivityWithSplits[]> {
   return attachSplits(activities);
 }
 
-export async function countPending(): Promise<number> {
+// Wrapped in React's request-scoped cache() so the root layout and the home page,
+// which both read the pending count in one render, share a single query per request.
+export const countPending = cache(async (): Promise<number> => {
   const row = await one<{ c: number }>(
     "SELECT COUNT(*) AS c FROM activities WHERE status = 'pending_review'"
   );
   return Number(row?.c ?? 0);
-}
+});
 
 export async function getActivity(id: number): Promise<ActivityWithSplits | null> {
   const activity = await one<Activity>(`${ACTIVITY_SELECT} WHERE a.id = ?`, [id]);
@@ -1047,8 +1062,20 @@ export async function listActivityLoadsForPmc(): Promise<{ started_at: string; t
 /** Recomputes every confirmed activity's load; returns the auto rows written. */
 export async function recomputeAllLoads(): Promise<{ count: number }> {
   const thresholds = await getAthleteThresholds();
+  // raw_json is a large blob that computeLoad reads ONLY inside its power branch,
+  // which is gated on isRideSport(sport_type). Fetch the blob only for ride sports
+  // (the LIKE conditions mirror isRideSport exactly: lower(sport) contains "ride" —
+  // which also covers "ebikeride" — or "velomobile"); every other row never reads
+  // it, so returning NULL there is behaviour-identical while skipping the blob for
+  // the majority of activities.
   const activities = await many<ActivityLoadInput>(
-    `SELECT ${ACTIVITY_LOAD_FIELDS} FROM activities WHERE status = 'confirmed'`
+    `SELECT id, sport_type, moving_time_s, distance_km, avg_hr, avg_pace_s_per_km, rpe,
+            CASE
+              WHEN LOWER(COALESCE(sport_type, '')) LIKE '%ride%'
+                OR LOWER(COALESCE(sport_type, '')) LIKE '%velomobile%'
+              THEN raw_json
+            END AS raw_json
+     FROM activities WHERE status = 'confirmed'`
   );
   const rows: {
     activityId: number;

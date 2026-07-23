@@ -68,6 +68,8 @@ DONE = committed, verify green · SKIPPED = intentionally not done (reason) · B
 
 | T3.10 | Chart default-series resync | DONE (SIGN-OFF) | _(this commit)_ | green | **Behavior-changing, labeled (CONFIRMED).** `activity-chart` now takes `activityId` and resets series/xMode/hover during render when it changes (React's "adjust state on prop change", no `useEffect`) so client-nav between activities no longer shows a stale default series. Added jsdom component-test infra (`@testing-library/react`, `jsdom`) via a per-file `// @vitest-environment jsdom` pragma — node-env engine tests untouched (65 tests, split confirmed). Test red pre-fix (stale Power toggle), green post-fix. **Risk:** a manually toggled series no longer carries across navigation to a different activity (intended). |
 
+| T3.9 | OAuth hardening | DONE (SIGN-OFF) | _(this commit)_ | green | **Behavior-changing, labeled (G11.4).** New `src/lib/crypto.ts` `constantTimeEqual` (node `timingSafeEqual` + length guard, 5 tests); the callback state check now uses it (constant-time). Connect route sets the state cookie `secure` in prod/https (`NODE_ENV===production` or `x-forwarded-proto`/protocol https), keeping `httpOnly`+`lax`; local http dev unaffected. State was already CSPRNG (`randomBytes(16)`). Happy path unchanged. |
+
 **M1 seams checkpoint:** full `npm run verify` (incl. 6 Playwright e2e) re-run by the orchestrator after T1.1–T1.5 — green.
 
 **M0 acceptance met:** `npm run verify` is green on `build/overnight` (independently re-run by the orchestrator, exit 0, incl. 6 Playwright specs), runs against a local sqlite file only, and CI is wired to run it on every PR.

@@ -367,6 +367,30 @@ export async function deleteMeta(key: string): Promise<void> {
 // Shoes
 // ---------------------------------------------------------------------------
 
+/**
+ * Clears a Strava gear_id off every OTHER row of `table` so the unique gear
+ * mapping holds before it is (re)assigned. On create there is no owning row yet,
+ * so `exceptId` is omitted and every current holder is cleared; on update the
+ * owning row is spared via `AND id != ?`. Emit this immediately before the
+ * assigning INSERT/UPDATE, exactly where each caller ran it inline before.
+ */
+function clearGearFromOthers(
+  table: "shoes" | "bikes",
+  gearId: string,
+  exceptId?: number
+): InStatement {
+  if (exceptId === undefined) {
+    return {
+      sql: `UPDATE ${table} SET strava_gear_id = NULL WHERE strava_gear_id = ?`,
+      args: [gearId],
+    };
+  }
+  return {
+    sql: `UPDATE ${table} SET strava_gear_id = NULL WHERE strava_gear_id = ? AND id != ?`,
+    args: [gearId, exceptId],
+  };
+}
+
 const SHOE_SELECT = `
 SELECT s.*, s.initial_km + COALESCE((
   SELECT SUM(sp.km)
@@ -398,10 +422,7 @@ export interface ShoeFields {
 export async function createShoe(fields: ShoeFields, photoPath: string | null): Promise<number> {
   const statements: InStatement[] = [];
   if (fields.strava_gear_id) {
-    statements.push({
-      sql: "UPDATE shoes SET strava_gear_id = NULL WHERE strava_gear_id = ?",
-      args: [fields.strava_gear_id],
-    });
+    statements.push(clearGearFromOthers("shoes", fields.strava_gear_id));
   }
   statements.push({
     sql: `INSERT INTO shoes (name, role, initial_km, retirement_km, strava_gear_id, photo_path)
@@ -426,10 +447,7 @@ export async function updateShoe(
 ): Promise<void> {
   const statements: InStatement[] = [];
   if (fields.strava_gear_id) {
-    statements.push({
-      sql: "UPDATE shoes SET strava_gear_id = NULL WHERE strava_gear_id = ? AND id != ?",
-      args: [fields.strava_gear_id, id],
-    });
+    statements.push(clearGearFromOthers("shoes", fields.strava_gear_id, id));
   }
   statements.push({
     sql: `UPDATE shoes SET name = ?, role = ?, initial_km = ?, retirement_km = ?,
@@ -457,10 +475,7 @@ export async function setShoeRetired(id: number, retired: boolean): Promise<void
 export async function setShoeGear(id: number, gearId: string | null): Promise<void> {
   const statements: InStatement[] = [];
   if (gearId) {
-    statements.push({
-      sql: "UPDATE shoes SET strava_gear_id = NULL WHERE strava_gear_id = ? AND id != ?",
-      args: [gearId, id],
-    });
+    statements.push(clearGearFromOthers("shoes", gearId, id));
   }
   statements.push({
     sql: "UPDATE shoes SET strava_gear_id = ? WHERE id = ?",
@@ -516,10 +531,7 @@ export interface BikeFields {
 export async function createBike(fields: BikeFields, photoPath: string | null): Promise<number> {
   const statements: InStatement[] = [];
   if (fields.strava_gear_id) {
-    statements.push({
-      sql: "UPDATE bikes SET strava_gear_id = NULL WHERE strava_gear_id = ?",
-      args: [fields.strava_gear_id],
-    });
+    statements.push(clearGearFromOthers("bikes", fields.strava_gear_id));
   }
   statements.push({
     sql: `INSERT INTO bikes (name, role, initial_km, strava_gear_id, photo_path)
@@ -537,10 +549,7 @@ export async function updateBike(
 ): Promise<void> {
   const statements: InStatement[] = [];
   if (fields.strava_gear_id) {
-    statements.push({
-      sql: "UPDATE bikes SET strava_gear_id = NULL WHERE strava_gear_id = ? AND id != ?",
-      args: [fields.strava_gear_id, id],
-    });
+    statements.push(clearGearFromOthers("bikes", fields.strava_gear_id, id));
   }
   statements.push({
     sql: `UPDATE bikes SET name = ?, role = ?, initial_km = ?, strava_gear_id = ?,
@@ -560,10 +569,7 @@ export async function setBikeRetired(id: number, retired: boolean): Promise<void
 export async function setBikeGear(id: number, gearId: string | null): Promise<void> {
   const statements: InStatement[] = [];
   if (gearId) {
-    statements.push({
-      sql: "UPDATE bikes SET strava_gear_id = NULL WHERE strava_gear_id = ? AND id != ?",
-      args: [gearId, id],
-    });
+    statements.push(clearGearFromOthers("bikes", gearId, id));
   }
   statements.push({
     sql: "UPDATE bikes SET strava_gear_id = ? WHERE id = ?",
@@ -697,6 +703,7 @@ export interface SyncedActivityInput {
 }
 
 const INSERT_SPLIT_SQL = "INSERT INTO activity_splits (activity_id, shoe_id, km) VALUES (?, ?, ?)";
+const DELETE_SPLITS_SQL = "DELETE FROM activity_splits WHERE activity_id = ?";
 
 export async function insertSyncedActivity(
   input: SyncedActivityInput,
@@ -754,7 +761,7 @@ export async function confirmActivity(
             workout_notes = ?, health_notes = ?, bike_id = ? WHERE id = ?`,
       args: [journal.rpe, journal.feeling, journal.workout_notes, journal.health_notes, bikeId, id],
     },
-    { sql: "DELETE FROM activity_splits WHERE activity_id = ?", args: [id] },
+    { sql: DELETE_SPLITS_SQL, args: [id] },
     ...splits.map((split) => ({
       sql: INSERT_SPLIT_SQL,
       args: [id, split.shoe_id, split.km],
@@ -795,7 +802,7 @@ export async function updateActivityJournal(id: number, journal: JournalFields):
 
 export async function replaceActivitySplits(id: number, splits: SplitInput[]): Promise<void> {
   await batchWrite([
-    { sql: "DELETE FROM activity_splits WHERE activity_id = ?", args: [id] },
+    { sql: DELETE_SPLITS_SQL, args: [id] },
     ...splits.map((split) => ({
       sql: INSERT_SPLIT_SQL,
       args: [id, split.shoe_id, split.km],
@@ -950,18 +957,50 @@ export async function getActivityLoad(activityId: number): Promise<ActivityLoadR
   );
 }
 
-/** Manual override: keeps any existing method, clears the intensity factor. */
-export async function setActivityLoadManual(activityId: number, tss: number): Promise<void> {
-  await exec(
-    `INSERT INTO activity_load (activity_id, tss, method, intensity_factor, source, computed_at)
+const ACTIVITY_LOAD_COLUMNS = "(activity_id, tss, method, intensity_factor, source, computed_at)";
+
+/**
+ * Canonical `activity_load` upsert — the single source of truth for every writer.
+ *
+ * `source` selects the correlated column handling that legitimately differs (these
+ * are NOT the same behaviour, so they are parameterized, not force-merged):
+ *   - 'auto'   → method + intensity_factor are bound params (`?`) that overwrite on
+ *                conflict (a computed load row).
+ *   - 'manual' → method/intensity_factor are inserted as NULL; on conflict the
+ *                existing method is preserved and intensity_factor cleared
+ *                (a user-entered TSS override).
+ *
+ * `overrideManual` applies to auto writers only, choosing whether an existing
+ * manual row is clobbered:
+ *   - false → guarded with `WHERE source != 'manual'`; a bulk recompute keeps hand
+ *             edits (source is left untouched).
+ *   - true  → unguarded and forces the row back to `source = 'auto'`; a single
+ *             recompute overrides any manual value.
+ */
+function activityLoadUpsert(opts: { source: "auto" | "manual"; overrideManual?: boolean }): string {
+  if (opts.source === "manual") {
+    return `INSERT INTO activity_load ${ACTIVITY_LOAD_COLUMNS}
      VALUES (?, ?, NULL, NULL, 'manual', ?)
      ON CONFLICT(activity_id) DO UPDATE SET
        tss = excluded.tss,
        source = 'manual',
        intensity_factor = NULL,
-       computed_at = excluded.computed_at`,
-    [activityId, tss, new Date().toISOString()]
-  );
+       computed_at = excluded.computed_at`;
+  }
+  const sourceSet = opts.overrideManual ? "\n       source = 'auto'," : "";
+  const guard = opts.overrideManual ? "" : "\n     WHERE activity_load.source != 'manual'";
+  return `INSERT INTO activity_load ${ACTIVITY_LOAD_COLUMNS}
+     VALUES (?, ?, ?, ?, 'auto', ?)
+     ON CONFLICT(activity_id) DO UPDATE SET
+       tss = excluded.tss,
+       method = excluded.method,
+       intensity_factor = excluded.intensity_factor,${sourceSet}
+       computed_at = excluded.computed_at${guard}`;
+}
+
+/** Manual override: keeps any existing method, clears the intensity factor. */
+export async function setActivityLoadManual(activityId: number, tss: number): Promise<void> {
+  await exec(activityLoadUpsert({ source: "manual" }), [activityId, tss, new Date().toISOString()]);
 }
 
 const ACTIVITY_LOAD_FIELDS =
@@ -978,26 +1017,17 @@ interface ActivityLoadInput {
   raw_json: string | null;
 }
 
-const UPSERT_AUTO_LOAD_SQL = `INSERT INTO activity_load
-    (activity_id, tss, method, intensity_factor, source, computed_at)
-  VALUES (?, ?, ?, ?, 'auto', ?)
-  ON CONFLICT(activity_id) DO UPDATE SET
-    tss = excluded.tss,
-    method = excluded.method,
-    intensity_factor = excluded.intensity_factor,
-    computed_at = excluded.computed_at
-  WHERE activity_load.source != 'manual'`;
-
 /** Bulk auto upsert; never clobbers rows the athlete edited by hand. */
 export async function upsertActivityLoads(
   rows: { activityId: number; tss: number; method: LoadMethod; intensityFactor: number | null }[]
 ): Promise<void> {
   if (rows.length === 0) return;
+  const sql = activityLoadUpsert({ source: "auto", overrideManual: false });
   const now = new Date().toISOString();
   for (let i = 0; i < rows.length; i += WRITE_CHUNK) {
     await batchWrite(
       rows.slice(i, i + WRITE_CHUNK).map((r) => ({
-        sql: UPSERT_AUTO_LOAD_SQL,
+        sql,
         args: [r.activityId, r.tss, r.method, r.intensityFactor, now],
       }))
     );
@@ -1054,17 +1084,13 @@ export async function recomputeActivityLoad(activityId: number): Promise<void> {
     await exec("DELETE FROM activity_load WHERE activity_id = ?", [activityId]);
     return;
   }
-  await exec(
-    `INSERT INTO activity_load (activity_id, tss, method, intensity_factor, source, computed_at)
-     VALUES (?, ?, ?, ?, 'auto', ?)
-     ON CONFLICT(activity_id) DO UPDATE SET
-       tss = excluded.tss,
-       method = excluded.method,
-       intensity_factor = excluded.intensity_factor,
-       source = 'auto',
-       computed_at = excluded.computed_at`,
-    [activityId, load.tss, load.method, load.intensityFactor, new Date().toISOString()]
-  );
+  await exec(activityLoadUpsert({ source: "auto", overrideManual: true }), [
+    activityId,
+    load.tss,
+    load.method,
+    load.intensityFactor,
+    new Date().toISOString(),
+  ]);
 }
 
 // ---------------------------------------------------------------------------

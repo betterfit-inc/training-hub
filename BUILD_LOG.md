@@ -46,6 +46,8 @@ DONE = committed, verify green · SKIPPED = intentionally not done (reason) · B
 
 | T2.7 | Migration versioning (`schema_version` + ordered registry) | DONE | _(this commit)_ | green | Replaced the `pragma_table_info`-inferred applied-state with an ordered `MIGRATIONS` registry (versions 1–5, sequential, matching execution order) tracked by a single-row `schema_version` table. Every step idempotent (`CREATE TABLE IF NOT EXISTS`, guarded ADD COLUMN, empty-only seed). Verified schema+seed equivalence against a **copy** of the real 1229-activity `data/app.db` (original never mutated) — identical except the intended `schema_version` addition; idempotent re-run leaves zero duplication. No `PRAGMA foreign_keys` (that's T3.1). |
 
+| T2.3 | Dedup `db.ts` | DONE | _(this commit)_ | green | Load-upsert 3→1 via `activityLoadUpsert({source, overrideManual})` — the divergent auto/manual/override semantics preserved as one parameterized template (verified SQL-equivalent). Gear-uniqueness UPDATE 6→1 via `clearGearFromOthers(table, gearId, exceptId?)`. Split-delete literal → one constant. All exported signatures + bound params unchanged; behavior-preserving. |
+
 **M1 seams checkpoint:** full `npm run verify` (incl. 6 Playwright e2e) re-run by the orchestrator after T1.1–T1.5 — green.
 
 **M0 acceptance met:** `npm run verify` is green on `build/overnight` (independently re-run by the orchestrator, exit 0, incl. 6 Playwright specs), runs against a local sqlite file only, and CI is wired to run it on every PR.

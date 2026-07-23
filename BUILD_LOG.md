@@ -74,6 +74,8 @@ DONE = committed, verify green · SKIPPED = intentionally not done (reason) · B
 
 | T3.6 | Strava resilience | DONE (SIGN-OFF) | _(this commit)_ | green | **Behavior-changing, labeled (G7.2, G7.4).** `apiGet` now honors `Retry-After` with a bounded retry (default 5s, cap 30s, max 2 retries) instead of aborting a whole sync on one 429 (logs each backoff). Token-refresh fetch gains `AbortSignal.timeout(15s)`. Streamless activities cache a negative marker (JSON `null`) so they stop re-hitting the API — return contract unchanged (`null` in → `null` out). Test-first: 5 tests (mocked fetch, temp DB, stubbed sleep — no real delays), red pre-fix. 79 unit tests. |
 
+| T3.7 | Background/bound recompute | DONE (SIGN-OFF) | _(this commit)_ | green | **Behavior-changing, labeled (G7.3).** `saveThresholdsAction` persists thresholds synchronously (unchanged) then schedules `recomputeAllLoads()` via Next 16 `after()` (post-response, verified in the docs), try/catch → `logger.error`. Recompute logic identical; only its timing moves off the blocking request path. Test uses a capturing `after` stub (4 tests) to prove the recompute is scheduled, not awaited; the real post-response timing is a documented (honest) test gap. **Risk:** loads/PMC become consistent a moment after the save response; on Vercel `after()` runs within the route `maxDuration` window (cost already reduced by T2.11). |
+
 **M1 seams checkpoint:** full `npm run verify` (incl. 6 Playwright e2e) re-run by the orchestrator after T1.1–T1.5 — green.
 
 **M0 acceptance met:** `npm run verify` is green on `build/overnight` (independently re-run by the orchestrator, exit 0, incl. 6 Playwright specs), runs against a local sqlite file only, and CI is wired to run it on every PR.

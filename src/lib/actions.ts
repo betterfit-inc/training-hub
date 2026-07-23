@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { cookies } from "next/headers";
 import { NONE } from "./constants";
 import { dictionaries, splitErrorText, isLang, type Dict } from "./i18n";
@@ -63,6 +64,7 @@ import {
 } from "./strava";
 import { parseId, validateSplits } from "./validate";
 import { fail, type ActionResult } from "./action-result";
+import { logger } from "./telemetry";
 import type { Feeling, SplitInput } from "./types";
 
 async function dict(): Promise<Dict> {
@@ -297,8 +299,20 @@ export async function saveThresholdsAction(input: ThresholdsInput): Promise<Acti
       restingHrEstimated: input.restingHrEstimated,
       ftpProvisional: input.ftpProvisional,
     });
-    // Thresholds drive every TSS value, so the curves refresh with them.
-    await recomputeAllLoads();
+    // Thresholds drive every TSS value, so the curves must refresh with them.
+    // But that recompute scales with confirmed-activity history (1200+ rows) and
+    // must not block the save response (G7.3, T3.7): the edit above is already
+    // durably persisted, so schedule the recompute to run AFTER the response with
+    // `after()` (Next 16, `next/server`) instead of awaiting it in-request. A
+    // post-response failure is logged (not swallowed) so it stays observable; the
+    // thresholds remain saved regardless of the deferred recompute's outcome.
+    after(async () => {
+      try {
+        await recomputeAllLoads();
+      } catch (error) {
+        logger.error("actions.saveThresholds.recompute", { error });
+      }
+    });
     refreshAll();
     return { ok: true };
   } catch (error) {

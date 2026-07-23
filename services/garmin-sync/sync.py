@@ -199,9 +199,12 @@ def login():
     def prompt_mfa() -> str:
         return input("Garmin MFA code: ")
 
+    # In python-garminconnect 0.3.x, login(tokenstore) both authenticates
+    # (invoking prompt_mfa when a 2FA code is needed) AND persists the OAuth
+    # tokens to tokenstore, so the next run resumes unattended. There is no
+    # separate garth.dump() in this version.
     garmin = Garmin(email=email, password=password, prompt_mfa=prompt_mfa)
-    garmin.login()
-    garmin.garth.dump(tokenstore)
+    garmin.login(tokenstore)
     log("logged in and cached a fresh token")
     return garmin
 

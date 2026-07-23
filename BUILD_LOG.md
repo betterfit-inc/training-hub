@@ -31,6 +31,8 @@ DONE = committed, verify green · SKIPPED = intentionally not done (reason) · B
 
 | T1.2 | Telemetry seam + fix silent catches | DONE | _(this commit)_ | green | New `src/lib/telemetry.ts`: `logger` (structured console → captured by Vercel Observability) + `track()` no-op stub (usage analytics deferred behind the seam). The 6 bare `catch {}` in `strava.ts` now log through the seam before returning their unchanged fallback (behavior-preserving). `storage.ts` left untouched: it has no silent catches in the current tree (assessment claim was stale) — adding one would have introduced a new swallow. One silent catch remains in `db.ts` (out of scope). |
 
+| T1.4 | Move personal/baseline data out of `db.ts` | DONE | _(this commit)_ | green | New `src/lib/baseline.ts` holds `BASELINE_SHOES`/`BASELINE_BIKES`/`THRESHOLD_DEFAULTS` (the sole owner's fixtures); `db.ts` imports them. Also deduped the threshold defaults so the `athlete_thresholds` seed INSERT sources from `THRESHOLD_DEFAULTS` instead of duplicated inline literals (G5.8). Seeded rows byte-identical; migration still auto-seeds on first run (behavior-preserving). |
+
 **M0 acceptance met:** `npm run verify` is green on `build/overnight` (independently re-run by the orchestrator, exit 0, incl. 6 Playwright specs), runs against a local sqlite file only, and CI is wired to run it on every PR.
 
 ### Discovered during M0 (not in the backlog — flag for later)

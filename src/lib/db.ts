@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createClient, type Client, type InStatement } from "@libsql/client";
+import { BASELINE_BIKES, BASELINE_SHOES, THRESHOLD_DEFAULTS } from "./baseline";
 import type { BlockActivity } from "./blocks";
 import { computeLoad, type AthleteThresholds, type LoadMethod } from "./fitness";
 import { currentAthlete, requireAthlete } from "./identity";
@@ -140,41 +141,6 @@ const SCHEMA: string[] = [
   "CREATE INDEX IF NOT EXISTS idx_activity_chat_activity_id ON activity_chat(activity_id)",
 ];
 
-// Real bikes with their current Strava odometers as baseline. The TR10 is the
-// trainer bike: its 33.4 km are the virtual rides already in the hub, so its
-// baseline is 0 and those confirmed rides supply the distance. The Stamina's
-// 467 km is outdoor history that lives in the log as pre-baseline (uncounted),
-// so its baseline carries that total.
-const BASELINE_BIKES: Array<{
-  name: string;
-  role: string;
-  photo: string;
-  initial_km: number;
-}> = [
-  { name: "TSW TR10 Speed Bike", role: "road", photo: "bike-tsw-tr10-one.png", initial_km: 0 },
-  {
-    name: "TSW Stamina 2025",
-    role: "mountain bike",
-    photo: "bike-tsw-stamina.png",
-    initial_km: 467,
-  },
-];
-
-// Real shoes with corrected current mileage (includes the 18 km moved from the
-// Adios Pro 4 to the Superblast 3). Inserted only when the shoes table is empty.
-const BASELINE_SHOES: Array<{ name: string; initial_km: number; role: string }> = [
-  { name: "Adidas Adios Pro 4", initial_km: 196.1, role: "race day / race pace trainings" },
-  { name: "Adidas Drive RC", initial_km: 474.1, role: "intervals" },
-  { name: "Adidas Evo SL Preto e Branco", initial_km: 452.6, role: "everyday shoe" },
-  { name: "Adidas Evo SL Preto e Cinza", initial_km: 236.2, role: "everyday shoe" },
-  {
-    name: "ASICS Superblast 3",
-    initial_km: 291.9,
-    role: "easy runs, long runs, injury recovery shoe",
-  },
-  { name: "Salomon S/Lab Ultra 3 V2", initial_km: 141.1, role: "trail shoe" },
-];
-
 async function migrate(): Promise<void> {
   // Migration 001: schema.
   await client.batch(SCHEMA, "write");
@@ -230,8 +196,18 @@ async function migrate(): Promise<void> {
         sql: `INSERT INTO athlete_thresholds
               (id, max_hr, resting_hr, lthr, threshold_pace_s_per_km, ftp_w,
                resting_hr_estimated, ftp_provisional, updated_at)
-              VALUES (?, ?, ?, ?, ?, ?, 1, 1, ?)`,
-        args: [currentAthlete().id, 199, 50, 176, 269, 150, new Date().toISOString()],
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          currentAthlete().id,
+          THRESHOLD_DEFAULTS.maxHr,
+          THRESHOLD_DEFAULTS.restingHr,
+          THRESHOLD_DEFAULTS.lthr,
+          THRESHOLD_DEFAULTS.thresholdPaceSPerKm,
+          THRESHOLD_DEFAULTS.ftpW,
+          THRESHOLD_DEFAULTS.restingHrEstimated ? 1 : 0,
+          THRESHOLD_DEFAULTS.ftpProvisional ? 1 : 0,
+          new Date().toISOString(),
+        ],
       });
     }
     const baseline = await tx.execute("SELECT value FROM app_meta WHERE key = 'baseline_date'");
@@ -800,18 +776,6 @@ export async function clearStravaAuth(): Promise<void> {
 // ---------------------------------------------------------------------------
 // Athlete thresholds + training load (fitness engine)
 // ---------------------------------------------------------------------------
-
-// Matches the migration seed; used only if the row is somehow missing.
-const THRESHOLD_DEFAULTS: AthleteThresholds = {
-  maxHr: 199,
-  restingHr: 50,
-  lthr: 176,
-  thresholdPaceSPerKm: 269,
-  ftpW: 150,
-  restingHrEstimated: true,
-  ftpProvisional: true,
-  updatedAt: null,
-};
 
 interface AthleteThresholdsRow {
   max_hr: number | null;

@@ -36,17 +36,42 @@ function activity(overrides: Partial<LoadActivity>): LoadActivity {
 }
 
 describe("computeLoad method priority", () => {
-  it("prefers power for a ride with wattage, HR and an FTP", () => {
+  it("prefers power for a ride with real device power, HR and an FTP", () => {
     const load = computeLoad(
       activity({
         sport_type: "Ride",
         moving_time_s: 3600,
         avg_hr: 150,
-        raw_json: JSON.stringify({ average_watts: 200, weighted_average_watts: 210 }),
+        raw_json: JSON.stringify({
+          average_watts: 200,
+          weighted_average_watts: 210,
+          device_watts: true,
+        }),
       }),
       thresholds
     );
     expect(load?.method).toBe("power");
+  });
+
+  it("ignores estimated (non-device) ride power and falls back to HR", () => {
+    // Strava-estimated wattage: watts present but device_watts is false. This
+    // must not produce a high-confidence power TSS; it should fall through to
+    // pace (n/a for rides) → HR.
+    const load = computeLoad(
+      activity({
+        sport_type: "Ride",
+        moving_time_s: 3600,
+        avg_hr: 150,
+        raw_json: JSON.stringify({
+          average_watts: 200,
+          weighted_average_watts: 210,
+          device_watts: false,
+        }),
+      }),
+      thresholds
+    );
+    expect(load?.method).not.toBe("power");
+    expect(load?.method).toBe("hr");
   });
 
   it("uses pace for a run with pace and HR", () => {

@@ -86,11 +86,13 @@ export function computeLoad(
   const time = activity.moving_time_s ?? 0;
   if (time <= 0) return null;
 
-  // 1. Power (rides with a normalized/average wattage and an FTP).
+  // 1. Power (rides with a real power meter, a normalized/average wattage and
+  // an FTP). Strava's *estimated* wattage (device_watts false/absent) is not
+  // trustworthy enough for a power TSS, so it falls through to the HR method.
   if (!opts.ignorePower && isRideSport(activity.sport_type) && thresholds.ftpW > 0) {
     const metrics = rideMetrics({ sport_type: activity.sport_type, raw_json: activity.raw_json });
     const power = metrics.normalizedPower ?? metrics.avgPower;
-    if (power != null && power > 0) {
+    if (metrics.hasRealPower && power != null && power > 0) {
       const intensity = clamp(power / thresholds.ftpW, 0, IF_CLAMP_POWER);
       return {
         tss: round1(tssFrom(time, intensity)),

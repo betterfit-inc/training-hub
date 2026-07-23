@@ -1,6 +1,6 @@
 import { ReviewFlow } from "@/components/review-flow";
 import { listBikes, listPendingActivities, listShoes } from "@/lib/db";
-import { toBikeOption, toShoeOption } from "@/lib/gear";
+import { toGearOption } from "@/lib/gear";
 import { getDict } from "@/lib/lang";
 
 export const metadata = { title: "Review" };
@@ -8,8 +8,8 @@ export const metadata = { title: "Review" };
 export default async function ReviewPage() {
   const { t } = await getDict();
   const items = await listPendingActivities();
-  const shoes = (await listShoes()).map(toShoeOption);
-  const bikes = (await listBikes()).map(toBikeOption);
+  const shoes = (await listShoes()).map(toGearOption);
+  const bikes = (await listBikes()).map(toGearOption);
 
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-8 sm:px-6">

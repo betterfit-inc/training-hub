@@ -3,15 +3,10 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { SyncButton } from "@/components/sync-button";
-import {
-  BikeMatcher,
-  DisconnectButton,
-  GearMatcher,
-  ManualActivityForm,
-} from "@/components/settings-forms";
+import { DisconnectButton, GearMatcher, ManualActivityForm } from "@/components/settings-forms";
 import { ThresholdsForm } from "@/components/thresholds-form";
 import { getAthleteThresholds, getMeta, listBikes, listShoes } from "@/lib/db";
-import { toBikeOption, toShoeOption } from "@/lib/gear";
+import { toGearOption } from "@/lib/gear";
 import { getDict } from "@/lib/lang";
 import { isStravaConnected, stravaConfigured, tryFetchAllGear } from "@/lib/strava";
 import { fmtDate, fmtDateLong, fmtTime } from "@/lib/format";
@@ -173,7 +168,8 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
             <CardContent>
               {gear && gear.length > 0 ? (
                 <GearMatcher
-                  shoes={shoes.map((s) => ({ ...toShoeOption(s), gearId: s.strava_gear_id }))}
+                  kind="shoe"
+                  items={shoes.map((s) => ({ ...toGearOption(s), gearId: s.strava_gear_id }))}
                   gear={gear}
                 />
               ) : (
@@ -193,8 +189,9 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
             </CardHeader>
             <CardContent>
               {bikeGear && bikeGear.length > 0 ? (
-                <BikeMatcher
-                  bikes={bikes.map((b) => ({ ...toBikeOption(b), gearId: b.strava_gear_id }))}
+                <GearMatcher
+                  kind="bike"
+                  items={bikes.map((b) => ({ ...toGearOption(b), gearId: b.strava_gear_id }))}
                   gear={bikeGear}
                 />
               ) : (
@@ -213,7 +210,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
           </CardHeader>
           <CardContent>
             {shoes.length > 0 ? (
-              <ManualActivityForm shoes={shoes.map(toShoeOption)} />
+              <ManualActivityForm shoes={shoes.map(toGearOption)} />
             ) : (
               <p className="text-sm text-muted-foreground">{t.settingsPage.addShoeFirst}</p>
             )}

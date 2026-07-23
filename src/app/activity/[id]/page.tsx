@@ -32,7 +32,7 @@ import { fmtCadence, fmtEnergy, fmtPower, fmtSpeed, isRideSport, rideMetrics } f
 import { fmtDateLong, fmtDuration, fmtElev, fmtHr, fmtKm, fmtPace, fmtTime } from "@/lib/format";
 import type { Dict } from "@/lib/i18n";
 import { isRunSport } from "@/lib/validate";
-import { toBikeOption, toShoeOption } from "@/lib/gear";
+import { toGearOption } from "@/lib/gear";
 
 export async function generateMetadata({ params }: PageProps<"/activity/[id]">) {
   const { id } = await params;
@@ -181,8 +181,8 @@ export default async function ActivityPage({ params }: PageProps<"/activity/[id]
   const ride = isRideSport(activity.sport_type);
   const confirmed = activity.status === "confirmed";
 
-  const shoes = ride ? [] : (await listShoes()).map(toShoeOption);
-  const bikes = ride ? (await listBikes()).map(toBikeOption) : [];
+  const shoes = ride ? [] : (await listShoes()).map(toGearOption);
+  const bikes = ride ? (await listBikes()).map(toGearOption) : [];
   const metrics = ride ? rideMetrics(activity) : null;
 
   // Training load: the persisted value from backfill, else computed on the fly

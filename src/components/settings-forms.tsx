@@ -25,7 +25,7 @@ import {
 import { NONE } from "@/lib/constants";
 import { fmtKm, localDateInputValue } from "@/lib/format";
 import { fillStr } from "@/lib/i18n";
-import type { BikeOption, ShoeOption, StravaGear } from "@/lib/types";
+import type { GearOption, StravaGear } from "@/lib/types";
 
 export function DisconnectButton() {
   const router = useRouter();
@@ -56,19 +56,25 @@ export function DisconnectButton() {
   );
 }
 
+// One matcher for both entities: identical chrome, the only difference is which
+// server action links the row. `kind` selects it so shoes call setShoeGearAction
+// and bikes call setBikeGearAction with the exact same (id, gearId) idiom.
 export function GearMatcher({
-  shoes,
+  items,
   gear,
+  kind,
 }: {
-  shoes: Array<ShoeOption & { gearId: string | null }>;
+  items: Array<GearOption & { gearId: string | null }>;
   gear: StravaGear[];
+  kind: "shoe" | "bike";
 }) {
   const router = useRouter();
   const { t } = useI18n();
+  const setGear = kind === "shoe" ? setShoeGearAction : setBikeGearAction;
 
-  function link(shoeId: number, value: string) {
+  function link(id: number, value: string) {
     const gearId = value === NONE ? null : value;
-    setShoeGearAction(shoeId, gearId).then((result) => {
+    setGear(id, gearId).then((result) => {
       if (!result.ok) {
         toast.error(result.error);
         return;
@@ -80,15 +86,15 @@ export function GearMatcher({
 
   return (
     <ul className="space-y-2.5">
-      {shoes.map((shoe) => (
-        <li key={shoe.id} className="flex items-center justify-between gap-3">
+      {items.map((item) => (
+        <li key={item.id} className="flex items-center justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{shoe.name}</p>
-            {shoe.role ? (
-              <p className="truncate text-xs text-muted-foreground italic">{shoe.role}</p>
+            <p className="truncate text-sm font-medium">{item.name}</p>
+            {item.role ? (
+              <p className="truncate text-xs text-muted-foreground italic">{item.role}</p>
             ) : null}
           </div>
-          <Select value={shoe.gearId ?? NONE} onValueChange={(value) => link(shoe.id, value)}>
+          <Select value={item.gearId ?? NONE} onValueChange={(value) => link(item.id, value)}>
             <SelectTrigger size="sm" className="w-52 shrink-0">
               <SelectValue />
             </SelectTrigger>
@@ -105,56 +111,7 @@ export function GearMatcher({
   );
 }
 
-export function BikeMatcher({
-  bikes,
-  gear,
-}: {
-  bikes: Array<BikeOption & { gearId: string | null }>;
-  gear: StravaGear[];
-}) {
-  const router = useRouter();
-  const { t } = useI18n();
-
-  function link(bikeId: number, value: string) {
-    const gearId = value === NONE ? null : value;
-    setBikeGearAction(bikeId, gearId).then((result) => {
-      if (!result.ok) {
-        toast.error(result.error);
-        return;
-      }
-      toast.success(gearId ? t.toasts.gearLinked : t.toasts.gearUnlinked);
-      router.refresh();
-    });
-  }
-
-  return (
-    <ul className="space-y-2.5">
-      {bikes.map((bike) => (
-        <li key={bike.id} className="flex items-center justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{bike.name}</p>
-            {bike.role ? (
-              <p className="truncate text-xs text-muted-foreground italic">{bike.role}</p>
-            ) : null}
-          </div>
-          <Select value={bike.gearId ?? NONE} onValueChange={(value) => link(bike.id, value)}>
-            <SelectTrigger size="sm" className="w-52 shrink-0">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={NONE}>{t.settingsPage.notLinked}</SelectItem>
-              {gear.map((g) => (
-                <GearSelectItem key={g.id} gear={g} />
-              ))}
-            </SelectContent>
-          </Select>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-export function ManualActivityForm({ shoes }: { shoes: ShoeOption[] }) {
+export function ManualActivityForm({ shoes }: { shoes: GearOption[] }) {
   const router = useRouter();
   const { t } = useI18n();
   const [date, setDate] = useState(() => localDateInputValue());

@@ -269,16 +269,21 @@ async function main() {
   const replaced = await clearSeeds();
 
   for (const a of ACTIVITIES) {
+    // The seed builds a local wall-clock via setHours, so the same stamp serves as
+    // both the stored instant and the local wall-clock — keeping seeded/e2e data
+    // consistent with synced rows that carry a distinct start_date_local.
+    const started = startedAt(a.daysAgo, a.hour);
     const result = await client.execute({
       sql: `INSERT INTO activities
-            (strava_id, name, sport_type, started_at, distance_km, moving_time_s,
+            (strava_id, name, sport_type, started_at, started_at_local, distance_km, moving_time_s,
              avg_pace_s_per_km, avg_hr, elevation_gain_m, status, rpe, feeling,
              workout_notes, health_notes, raw_json)
-            VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         a.name,
         a.sport,
-        startedAt(a.daysAgo, a.hour),
+        started,
+        started,
         a.km,
         a.movingS,
         a.km > 0 ? Math.round(a.movingS / a.km) : null,

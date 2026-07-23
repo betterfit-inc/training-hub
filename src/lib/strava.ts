@@ -361,6 +361,9 @@ interface StravaActivity {
   sport_type?: string;
   type?: string;
   start_date?: string;
+  // The athlete's local wall-clock, formatted with a trailing Z (a Strava quirk):
+  // reading it with UTC getters yields the correct local day/time.
+  start_date_local?: string;
   distance?: number;
   moving_time?: number;
   average_heartrate?: number;
@@ -439,6 +442,7 @@ export async function syncActivities(): Promise<SyncResult> {
           name: activity.name ?? null,
           sport_type: sport,
           started_at: activity.start_date,
+          started_at_local: activity.start_date_local ?? null,
           distance_km: distanceKm,
           moving_time_s: movingS,
           avg_pace_s_per_km: pace,

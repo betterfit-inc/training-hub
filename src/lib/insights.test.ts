@@ -9,6 +9,7 @@ function activity(overrides: Partial<Activity>): Activity {
     name: null,
     sport_type: "Run",
     started_at: null,
+    started_at_local: null,
     distance_km: 5,
     moving_time_s: 1500,
     avg_pace_s_per_km: null,

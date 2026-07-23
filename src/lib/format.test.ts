@@ -9,6 +9,7 @@ import {
   fmtPace,
   fmtPaceShort,
   fmtTime,
+  localStartedAt,
   parsePace,
   round2,
 } from "@/lib/format";
@@ -122,5 +123,36 @@ describe("invalid ISO handling (T3.4)", () => {
 
   it("renders an empty time for an unparseable instant", () => {
     expect(fmtTime("not-a-date")).toBe("");
+  });
+});
+
+// The start_date_local fix: an evening activity whose UTC instant crosses midnight
+// shows the WRONG calendar day when the UTC start_date is formatted, but the RIGHT
+// local day when Strava's naive-local start_date_local is formatted instead.
+// localStartedAt selects the local stamp when present and falls back to the UTC
+// instant when it is null (rows synced before the column existed).
+describe("localStartedAt renders the athlete's true local day", () => {
+  // Same 21:00 run on Sunday 15 March in a UTC-3 zone: the UTC instant lands on
+  // Monday 16 March, the naive-local stamp stays on Sunday 15 March.
+  const utcInstant = "2026-03-16T00:00:00Z"; // Strava start_date
+  const localStamp = "2026-03-15T21:00:00Z"; // Strava start_date_local
+
+  it("formats the UTC instant on the wrong (next) day", () => {
+    expect(fmtDate(utcInstant, "en")).toBe("Mon 16 Mar");
+  });
+
+  it("formats the local stamp on the correct day", () => {
+    expect(fmtDate(localStamp, "en")).toBe("Sun 15 Mar");
+    expect(fmtTime(localStamp)).toBe("21:00");
+  });
+
+  it("prefers the local stamp when captured", () => {
+    const iso = localStartedAt({ started_at: utcInstant, started_at_local: localStamp });
+    expect(fmtDate(iso, "en")).toBe("Sun 15 Mar");
+  });
+
+  it("falls back to the UTC instant when the local stamp is null", () => {
+    const iso = localStartedAt({ started_at: utcInstant, started_at_local: null });
+    expect(fmtDate(iso, "en")).toBe("Mon 16 Mar");
   });
 });

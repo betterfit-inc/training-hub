@@ -1,4 +1,18 @@
 import type { Lang } from "./i18n";
+import type { Activity } from "./types";
+
+/**
+ * The timestamp to format for an activity's start. Prefers Strava's
+ * `start_date_local` (the activity's naive local wall-clock, Z-suffixed) so the
+ * date formatters below — which read with UTC getters — render the athlete's true
+ * local day/time. Rows synced before that column existed carry a null local stamp
+ * and fall back to the UTC instant `started_at`, unchanged from before.
+ */
+export function localStartedAt(
+  activity: Pick<Activity, "started_at_local" | "started_at">
+): string | null {
+  return activity.started_at_local ?? activity.started_at;
+}
 
 const DAYS: Record<Lang, readonly string[]> = {
   en: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],

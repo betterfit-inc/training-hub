@@ -4,7 +4,7 @@ import { EmptyState } from "@/components/empty-state";
 import { FeelingBadge } from "@/components/feeling-badge";
 import { listRaces } from "@/lib/db";
 import { getDict } from "@/lib/lang";
-import { fmtDate, fmtDuration, fmtKm, fmtPace, fmtPaceShort } from "@/lib/format";
+import { fmtDate, fmtDuration, fmtKm, fmtPace, fmtPaceShort, localStartedAt } from "@/lib/format";
 import { fillStr } from "@/lib/i18n";
 import { raceCategory } from "@/lib/races";
 import { isRunSport } from "@/lib/validate";
@@ -25,7 +25,7 @@ export default async function RacesPage() {
   // Group by calendar year, newest first.
   const groups: Array<{ year: string; items: typeof races }> = [];
   for (const race of races) {
-    const year = (race.started_at ?? race.created_at).slice(0, 4);
+    const year = (localStartedAt(race) ?? race.created_at).slice(0, 4);
     const group = groups.find((g) => g.year === year);
     if (group) group.items.push(race);
     else groups.push({ year, items: [race] });
@@ -84,7 +84,7 @@ export default async function RacesPage() {
                         className="group/row -mx-2 grid grid-cols-[70px_minmax(0,1fr)_auto] items-center gap-x-3 rounded-lg px-2 py-3 transition-colors hover:bg-accent/50 sm:grid-cols-[80px_110px_minmax(0,1fr)_auto]"
                       >
                         <span className="font-mono text-xs whitespace-nowrap tabular-nums text-muted-foreground">
-                          {fmtDate(race.started_at, lang)}
+                          {fmtDate(localStartedAt(race), lang)}
                         </span>
 
                         <span className="hidden sm:block">

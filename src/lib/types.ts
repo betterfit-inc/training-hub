@@ -41,6 +41,9 @@ export interface Activity {
   name: string | null;
   sport_type: string | null;
   started_at: string | null;
+  // Strava's start_date_local: the activity's naive local wall-clock (Z-suffixed).
+  // Null for rows synced before it was captured; readers fall back to started_at.
+  started_at_local: string | null;
   distance_km: number | null;
   moving_time_s: number | null;
   avg_pace_s_per_km: number | null;

@@ -111,6 +111,7 @@ export interface SyncedActivityInput {
   name: string | null;
   sport_type: string | null;
   started_at: string;
+  started_at_local: string | null;
   distance_km: number;
   moving_time_s: number | null;
   avg_pace_s_per_km: number | null;
@@ -133,14 +134,15 @@ export async function insertSyncedActivity(
   try {
     const result = await tx.execute({
       sql: `INSERT INTO activities
-            (strava_id, name, sport_type, started_at, distance_km, moving_time_s,
+            (strava_id, name, sport_type, started_at, started_at_local, distance_km, moving_time_s,
              avg_pace_s_per_km, avg_hr, elevation_gain_m, status, raw_json, bike_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         input.strava_id,
         input.name,
         input.sport_type,
         input.started_at,
+        input.started_at_local,
         input.distance_km,
         input.moving_time_s,
         input.avg_pace_s_per_km,
@@ -236,12 +238,15 @@ export async function createManualActivity(input: {
   name?: string;
 }): Promise<number> {
   await ensureMigrated();
+  // The picked date is already a local calendar day, so its noon stamp is both the
+  // stored instant and the local wall-clock — carry it in both columns.
+  const startedAt = `${input.date}T12:00:00Z`;
   const tx = await client.transaction("write");
   try {
     const result = await tx.execute({
-      sql: `INSERT INTO activities (name, sport_type, started_at, distance_km, status)
-            VALUES (?, 'Manual', ?, ?, 'confirmed')`,
-      args: [input.name ?? "Manual adjustment", `${input.date}T12:00:00Z`, input.km],
+      sql: `INSERT INTO activities (name, sport_type, started_at, started_at_local, distance_km, status)
+            VALUES (?, 'Manual', ?, ?, ?, 'confirmed')`,
+      args: [input.name ?? "Manual adjustment", startedAt, startedAt, input.km],
     });
     const activityId = Number(result.lastInsertRowid);
     await tx.execute({ sql: INSERT_SPLIT_SQL, args: [activityId, input.shoe_id, input.km] });

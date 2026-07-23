@@ -6,7 +6,7 @@ import { cookies } from "next/headers";
 import { NONE } from "./constants";
 import { dictionaries, splitErrorText, isLang, type Dict } from "./i18n";
 import { LANG_COOKIE, getLang } from "./lang";
-import { storePhoto } from "./storage";
+import { storePhoto, deletePhoto, InvalidImageError } from "./storage";
 import {
   addActivityChatMessage,
   clearActivityChat,
@@ -396,14 +396,22 @@ export async function saveShoeAction(formData: FormData): Promise<ActionResult> 
     };
 
     if (id) {
-      if (!(await getShoe(id))) return { ok: false, error: t.errors.shoeNotFound };
+      const existing = await getShoe(id);
+      if (!existing) return { ok: false, error: t.errors.shoeNotFound };
       await updateShoe(id, fields, photoPath);
+      // A replaced photo orphans the previous asset; clean it up after the
+      // response so it never blocks or fails the save (best-effort, logs).
+      if (photoPath && existing.photo_path && existing.photo_path !== photoPath) {
+        const orphan = existing.photo_path;
+        after(() => deletePhoto(orphan));
+      }
     } else {
       await createShoe(fields, photoPath);
     }
     refreshAll();
     return { ok: true };
   } catch (error) {
+    if (error instanceof InvalidImageError) return { ok: false, error: t.errors.invalidImage };
     return fail(error, t.errors.generic);
   }
 }
@@ -477,14 +485,22 @@ export async function saveBikeAction(formData: FormData): Promise<ActionResult> 
     };
 
     if (id) {
-      if (!(await getBike(id))) return { ok: false, error: t.errors.bikeNotFound };
+      const existing = await getBike(id);
+      if (!existing) return { ok: false, error: t.errors.bikeNotFound };
       await updateBike(id, fields, photoPath);
+      // A replaced photo orphans the previous asset; clean it up after the
+      // response so it never blocks or fails the save (best-effort, logs).
+      if (photoPath && existing.photo_path && existing.photo_path !== photoPath) {
+        const orphan = existing.photo_path;
+        after(() => deletePhoto(orphan));
+      }
     } else {
       await createBike(fields, photoPath);
     }
     refreshAll();
     return { ok: true };
   } catch (error) {
+    if (error instanceof InvalidImageError) return { ok: false, error: t.errors.invalidImage };
     return fail(error, t.errors.generic);
   }
 }

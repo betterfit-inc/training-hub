@@ -108,6 +108,11 @@ def build_snapshot(garmin, date: str) -> dict:
         readiness = readiness[0] if readiness else {}
     readiness = as_dict(readiness)
 
+    # Garmin's trainingreadiness `recoveryTime` is in MINUTES; the ingest
+    # contract wants hours. (A raw value like 1584 is 26.4 h, not 1584 h.)
+    recovery_min = num(readiness.get("recoveryTime"))
+    recovery_hrs = round(recovery_min / 60, 1) if recovery_min is not None else None
+
     resting_hr = rhr if isinstance(rhr, (int, float)) else None
     if resting_hr is None and isinstance(rhr, dict):
         resting_hr = num(rhr.get("restingHeartRate"))
@@ -150,7 +155,7 @@ def build_snapshot(garmin, date: str) -> dict:
         "trainingReadiness": {
             "score": num(readiness.get("score")),
             "level": readiness.get("level"),
-            "recoveryTimeHrs": num(readiness.get("recoveryTime")),
+            "recoveryTimeHrs": recovery_hrs,
         },
         "trainingStatus": {
             "status": status.get("latestTrainingStatus") or status.get("trainingStatus"),

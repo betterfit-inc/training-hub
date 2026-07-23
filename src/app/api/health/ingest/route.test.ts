@@ -86,19 +86,16 @@ describe("POST /api/health/ingest", () => {
     expect(byMetric.get("hrv_status")?.value_text).toBe("BALANCED");
   });
 
-  it("is idempotent: re-posting a day overwrites that day+source in place", async () => {
+  it("re-posting a day updates present metrics and PRESERVES omitted ones", async () => {
     await route.POST(post({ ...SNAPSHOT, restingHr: 47, steps: 9000 }, SECRET));
-    const first = await db.getHealthMetricsForDate("2026-07-20");
-    const firstGarmin = first.filter((r) => r.source === "garmin").length;
 
-    // Re-post the same day with a changed value and one fewer metric.
+    // Re-post the same day with a changed value and one fewer metric (steps): a
+    // transient per-metric fetch miss must not erase the prior good steps row.
     await route.POST(post({ date: "2026-07-20", source: "garmin", restingHr: 45 }, SECRET));
-    const second = await db.getHealthMetricsForDate("2026-07-20");
-    const secondGarmin = second.filter((r) => r.source === "garmin");
-    expect(secondGarmin.find((r) => r.metric === "resting_hr")?.value).toBe(45);
-    // steps dropped out of the second snapshot, so its stale row is gone too.
-    expect(secondGarmin.find((r) => r.metric === "steps")).toBeUndefined();
-    expect(secondGarmin.length).toBeLessThan(firstGarmin);
+    const rows = await db.getHealthMetricsForDate("2026-07-20");
+    const garmin = rows.filter((r) => r.source === "garmin");
+    expect(garmin.find((r) => r.metric === "resting_hr")?.value).toBe(45); // updated
+    expect(garmin.find((r) => r.metric === "steps")?.value).toBe(9000); // preserved
   });
 
   it("keeps a manual row when a device re-sync replaces only its own source", async () => {

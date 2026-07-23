@@ -36,7 +36,7 @@ import {
   updateActivityJournal,
   updateBike,
   updateShoe,
-  upsertHealthMetrics,
+  replaceHealthMetricsForDaySource,
   confirmActivity,
   getReadinessSnapshot,
   getRecoveryState,
@@ -48,7 +48,7 @@ import {
 } from "./db";
 import { METRIC_META, SUBJECTIVE_SCALE, snapshotToMetrics } from "./health";
 import { dictionaries } from "./i18n";
-import { fmtHoursMin } from "./format";
+import { fmtHoursMin, localDateInputValue } from "./format";
 import {
   buildActivityContext,
   buildDigestContext,
@@ -775,6 +775,11 @@ export async function saveHealthEntryAction(input: HealthEntryInput): Promise<Ac
     if (input.weight !== null && !inRange(input.weight, 20, 400)) {
       return { ok: false, error: t.errors.invalidHealthEntry };
     }
+    // Reject a future check-in (and, via the normalizer below, an impossible
+    // calendar date) so a malformed entry can't become the latest readiness day.
+    if (input.date > localDateInputValue(new Date())) {
+      return { ok: false, error: t.errors.invalidDate };
+    }
 
     // Reuse the ingest normalizer so manual and device paths share one shape +
     // validation. sickness/injury are recorded every save (0 or 1) so a cleared
@@ -797,7 +802,10 @@ export async function saveHealthEntryAction(input: HealthEntryInput): Promise<Ac
     );
     if ("error" in normalized) return { ok: false, error: t.errors.invalidDate };
 
-    await upsertHealthMetrics(normalized.rows);
+    // Replace this day's MANUAL rows (not a per-field upsert) so a field the
+    // athlete cleared in the form is actually removed, not left stale. Device
+    // rows for the day are a different source and stay untouched.
+    await replaceHealthMetricsForDaySource(input.date, "manual", normalized.rows);
     refreshAll();
     return { ok: true };
   } catch (error) {

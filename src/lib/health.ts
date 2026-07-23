@@ -301,6 +301,17 @@ export function resolveMetrics<T extends Resolvable & { metric: HealthMetric }>(
 // contract in docs/health-readiness/RESEARCH_GARMIN_LIBS.md §5.
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+/**
+ * True when a YYYY-MM-DD string is a real calendar day. The regex alone accepts
+ * impossible dates (2026-02-30); a UTC round-trip rejects them so malformed
+ * ingest data can never become a latest-date/baseline key.
+ */
+export function isRealCalendarDate(date: string): boolean {
+  const [y, m, d] = date.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -330,7 +341,7 @@ export function snapshotToMetrics(
 ): { rows: HealthMetricInput[] } | { error: string } {
   if (!isRecord(input)) return { error: "body must be a JSON object" };
   const date = input.date;
-  if (typeof date !== "string" || !DATE_RE.test(date)) {
+  if (typeof date !== "string" || !DATE_RE.test(date) || !isRealCalendarDate(date)) {
     return { error: "date must be YYYY-MM-DD" };
   }
   if (!isHealthSource(input.source)) {
@@ -392,8 +403,10 @@ export function snapshotToMetrics(
   const status = isRecord(input.trainingStatus) ? input.trainingStatus : {};
   pushText("device_training_status", label(status.status));
 
-  // Subjective self-report (a manual snapshot may carry these). Flags are 0/1.
-  const subjective = isRecord(input.subjective) ? input.subjective : {};
+  // Subjective self-report is MANUAL-only: a device snapshot must never write or
+  // overwrite these (they would change readiness + the red-flag state). Flags are
+  // stored 0/1 so a cleared flag is captured, not just a set one.
+  const subjective = source === "manual" && isRecord(input.subjective) ? input.subjective : {};
   pushNum("fatigue", num(subjective.fatigue));
   pushNum("soreness", num(subjective.soreness));
   pushNum("stress_subjective", num(subjective.stress));

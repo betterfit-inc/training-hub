@@ -84,6 +84,29 @@ export function HealthEntryForm({ initial }: { initial?: HealthEntryInitial }) {
   const setRating = (key: RatingKey) => (v: number | null) =>
     setRatings((prev) => ({ ...prev, [key]: v }));
 
+  // Changing the date starts a fresh entry for that day: clear the fields so
+  // the previously-shown day's ratings/weight/flags can't be saved onto another
+  // date. The prefill only ever applies to the initially-shown day.
+  function changeDate(next: string) {
+    setDate(next);
+    if (next !== (initial?.date ?? "")) {
+      setRatings({ fatigue: null, soreness: null, stress: null, mood: null });
+      setWeight("");
+      setSickness(false);
+      setInjury(false);
+    } else {
+      setRatings({
+        fatigue: initial?.fatigue ?? null,
+        soreness: initial?.soreness ?? null,
+        stress: initial?.stress ?? null,
+        mood: initial?.mood ?? null,
+      });
+      setWeight(initial?.weight != null ? String(initial.weight) : "");
+      setSickness(initial?.sickness ?? false);
+      setInjury(initial?.injury ?? false);
+    }
+  }
+
   function submit(event: React.FormEvent) {
     event.preventDefault();
     const weightValue = weight.trim() === "" ? null : parseFiniteNumber(weight);
@@ -121,7 +144,7 @@ export function HealthEntryForm({ initial }: { initial?: HealthEntryInitial }) {
             type="date"
             value={date}
             max={localDateInputValue()}
-            onChange={(e) => setDate(e.target.value)}
+            onChange={(e) => changeDate(e.target.value)}
             className="font-mono tabular-nums"
           />
         </div>

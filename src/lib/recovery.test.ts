@@ -133,6 +133,26 @@ describe("computeRecovery", () => {
     expect(unfit.remainingHours).toBeGreaterThan(fresh.remainingHours);
   });
 
+  it("excludes future-dated activities (valid at the requested asOf)", () => {
+    const future = computeRecovery(
+      [act({ intensityFactor: 1.0, finishedAt: "2026-07-24T12:00:00.000Z" })], // after NOW
+      CTX,
+      NOW
+    );
+    expect(future.remainingHours).toBe(0);
+    expect(future.contributions).toHaveLength(0);
+  });
+
+  it("still costs an RPE-only session by implying intensity from TSS + duration", () => {
+    const r = computeRecovery(
+      // No IF, no HR, no thresholds — but a real stored load over a known duration.
+      [act({ intensityFactor: null, avgHr: null, tss: 120, durationS: 3600 })],
+      CTX,
+      NOW
+    );
+    expect(r.remainingHours).toBeGreaterThan(0);
+  });
+
   it("derives intensity from HR when IF is absent", () => {
     const r = computeRecovery(
       [act({ intensityFactor: null, avgHr: 170 })],

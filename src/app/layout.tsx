@@ -57,20 +57,25 @@ export default async function RootLayout({
   // nothing; when configured, reflect whether the owner has a valid session.
   const auth = !authConfigured() ? "disabled" : (await isAuthenticated()) ? "in" : "out";
 
-  // Global recovery-remaining for the live header badge. Shown only once there is
-  // something to show (open debt or recent sessions); the device recovery-time
-  // reference is fetched only in that case to keep the common path lean.
-  const recoveryState = await getRecoveryState();
+  // Global recovery-remaining for the live header badge. Never computed or sent
+  // for an unauthenticated visitor (auth === "out"): the /login page must not
+  // carry the owner's recovery state or activity names in its RSC payload. Shown
+  // only once there is something to show; the device recovery-time reference is
+  // fetched only in that case to keep the common path lean.
   let recovery: RecoveryBadgeData | null = null;
-  if (recoveryState.remainingHours > 0 || recoveryState.contributions.length > 0) {
-    const now = new Date();
-    const today = localDateInputValue(now);
-    const fromDate = new Date(now);
-    fromDate.setDate(fromDate.getDate() - 30);
-    const from = localDateInputValue(fromDate);
-    const deviceHours =
-      (await getResolvedNumericSeries("device_recovery_hours", from, today)).at(-1)?.value ?? null;
-    recovery = { ...recoveryState, deviceHours };
+  if (auth !== "out") {
+    const recoveryState = await getRecoveryState();
+    if (recoveryState.remainingHours > 0 || recoveryState.contributions.length > 0) {
+      const now = new Date();
+      const today = localDateInputValue(now);
+      const fromDate = new Date(now);
+      fromDate.setDate(fromDate.getDate() - 30);
+      const from = localDateInputValue(fromDate);
+      const deviceHours =
+        (await getResolvedNumericSeries("device_recovery_hours", from, today)).at(-1)?.value ??
+        null;
+      recovery = { ...recoveryState, deviceHours };
+    }
   }
 
   return (

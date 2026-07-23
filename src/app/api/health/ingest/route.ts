@@ -8,12 +8,14 @@
 // guarding it, so the token check is mandatory.
 //
 // The route is intentionally thin: parse -> authorize -> normalize (the pure
-// src/lib/health.ts) -> idempotent upsert. Re-posting a day overwrites that
-// day's rows for that source, so a trailing-window re-sync backfills cleanly.
+// src/lib/health.ts) -> per-metric upsert. Re-posting a day updates the metrics
+// present in the new snapshot and PRESERVES ones it omits, so a transient
+// per-metric fetch failure in the sync never erases a previously-good reading;
+// a trailing-window re-sync backfills cleanly.
 import type { NextRequest } from "next/server";
 import { constantTimeEqual } from "@/lib/crypto";
 import { snapshotToMetrics } from "@/lib/health";
-import { replaceHealthMetricsForDaySource } from "@/lib/db";
+import { upsertHealthMetrics } from "@/lib/db";
 import { logger } from "@/lib/telemetry";
 
 const BEARER = "Bearer ";
@@ -59,7 +61,7 @@ export async function POST(request: NextRequest): Promise<Response> {
   }
 
   const { date, source } = rows[0];
-  await replaceHealthMetricsForDaySource(date, source, rows);
+  await upsertHealthMetrics(rows);
   logger.info("health.ingest.ok", { date, source, count: rows.length });
   return Response.json({ ok: true, date, source, count: rows.length });
 }

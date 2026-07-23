@@ -80,26 +80,33 @@ def safe(label: str, fn):
         return None
 
 
+def as_dict(value: object) -> dict:
+    """Coerce a Garmin response to a dict, so a changed/unexpected shape (e.g. a
+    list or None) degrades to 'no fields' instead of crashing the whole day on a
+    later `.get`."""
+    return value if isinstance(value, dict) else {}
+
+
 def build_snapshot(garmin, date: str) -> dict:
     """Normalize one day's Garmin data into the app's generic ingest contract.
 
     Only the app-agnostic shape is produced here; the app maps it to
     health_metrics. Absent fields are simply omitted (the app NaN-guards too)."""
-    sleep = (safe("sleep", lambda: garmin.get_sleep_data(date)) or {}).get("dailySleepDTO", {}) or {}
-    hrv = (safe("hrv", lambda: garmin.get_hrv_data(date)) or {}).get("hrvSummary", {}) or {}
+    sleep = as_dict(as_dict(safe("sleep", lambda: garmin.get_sleep_data(date))).get("dailySleepDTO"))
+    hrv = as_dict(as_dict(safe("hrv", lambda: garmin.get_hrv_data(date))).get("hrvSummary"))
     rhr = safe("rhr", lambda: garmin.get_rhr_day(date))
-    stress = safe("stress", lambda: garmin.get_all_day_stress(date)) or {}
-    stats = safe("stats", lambda: garmin.get_stats(date)) or {}
-    resp = safe("respiration", lambda: garmin.get_respiration_data(date)) or {}
-    spo2 = safe("spo2", lambda: garmin.get_spo2_data(date)) or {}
+    stress = as_dict(safe("stress", lambda: garmin.get_all_day_stress(date)))
+    stats = as_dict(safe("stats", lambda: garmin.get_stats(date)))
+    resp = as_dict(safe("respiration", lambda: garmin.get_respiration_data(date)))
+    spo2 = as_dict(safe("spo2", lambda: garmin.get_spo2_data(date)))
     steps = safe("steps", lambda: garmin.get_daily_steps(date, date)) or []
     readiness = safe("training_readiness", lambda: garmin.get_training_readiness(date))
-    status = safe("training_status", lambda: garmin.get_training_status(date)) or {}
+    status = as_dict(safe("training_status", lambda: garmin.get_training_status(date)))
 
     # get_training_readiness may return a list of entries; take the first.
     if isinstance(readiness, list):
         readiness = readiness[0] if readiness else {}
-    readiness = readiness or {}
+    readiness = as_dict(readiness)
 
     resting_hr = rhr if isinstance(rhr, (int, float)) else None
     if resting_hr is None and isinstance(rhr, dict):
@@ -209,7 +216,12 @@ def main() -> None:
         log("done (mock)")
         return
 
-    days = int(env("SYNC_DAYS", "3") or "3")
+    try:
+        days = int(env("SYNC_DAYS", "3") or "3")
+    except ValueError:
+        days = 0
+    if days < 1:
+        fail("SYNC_DAYS must be an integer >= 1")
     garmin = login()
 
     today = dt.date.today()

@@ -169,6 +169,29 @@ describe("snapshotToMetrics", () => {
     });
   });
 
+  it("rejects an impossible calendar date that passes the format regex", () => {
+    expect(snapshotToMetrics({ date: "2026-02-30", source: "garmin", restingHr: 47 }, AT)).toEqual({
+      error: "date must be YYYY-MM-DD",
+    });
+  });
+
+  it("ignores subjective fields from a non-manual source", () => {
+    const result = snapshotToMetrics(
+      {
+        date: "2026-07-23",
+        source: "garmin",
+        restingHr: 47,
+        subjective: { fatigue: 4, sickness: 1 },
+      },
+      AT
+    );
+    if (!("rows" in result)) throw new Error("expected rows");
+    const metrics = result.rows.map((r) => r.metric);
+    expect(metrics).toContain("resting_hr");
+    expect(metrics).not.toContain("fatigue");
+    expect(metrics).not.toContain("sickness");
+  });
+
   it("rejects a non-object body", () => {
     expect(snapshotToMetrics("nope", AT)).toEqual({ error: "body must be a JSON object" });
     expect(snapshotToMetrics(null, AT)).toEqual({ error: "body must be a JSON object" });

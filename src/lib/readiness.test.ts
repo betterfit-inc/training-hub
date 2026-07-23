@@ -57,8 +57,8 @@ describe("computeReadiness", () => {
 
   it("applies the ACWR spike guardrail to the load component", () => {
     const r = computeReadiness(baseInputs({ load: { tsb: 25, acwr: 1.5 } }));
-    // tsb 25 -> 100; acwr 1.5 -> factor 0.7 -> 70.
-    expect(r.components.find((c) => c.key === "load")?.sub).toBe(70);
+    // tsb 25 -> 95 (high-freshness plateau); acwr 1.5 -> factor 0.7 -> 66.5.
+    expect(r.components.find((c) => c.key === "load")?.sub).toBe(66.5);
   });
 
   it("forces the band down to Caution on a sickness flag even with a high score", () => {

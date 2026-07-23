@@ -161,11 +161,14 @@ function energySub(energy: EnergyContext): number | null {
 // Training-load freshness from TSB, with an ACWR guardrail. The TSB->score curve
 // is monotonic and plateaus high (per the TrainingPeaks form zones); ACWR only
 // pulls the score DOWN in the spike zone (a fresh, low-ACWR day is not penalized).
+// A high-freshness plateau: freshness rises to ~95 by TSB +25 and stays there,
+// rather than hitting a perfect 100 that would over-inflate the load component
+// on very fresh (often detrained) days (per the research model).
 const TSB_BREAKPOINTS: { tsb: number; score: number }[] = [
   { tsb: -30, score: 20 },
   { tsb: -10, score: 70 },
   { tsb: 5, score: 90 },
-  { tsb: 25, score: 100 },
+  { tsb: 25, score: 95 },
 ];
 const ACWR_SPIKE_LOW = 1.3;
 const ACWR_SPIKE_HIGH = 1.5;
@@ -307,8 +310,14 @@ export function computeReadiness(inputs: ReadinessInputs): Readiness {
   let band = bandFor(score);
   if (redFlag && band === "ready") band = "caution";
 
+  // The most-limiting factor is the largest WEIGHTED deficit (100 - sub) * weight,
+  // so it reflects what actually drags the weighted score down — not just the
+  // lowest raw sub-score of a lightly-weighted component.
+  const deficit = (c: ReadinessComponent) => (100 - c.sub) * c.weight;
   const topNegative =
-    components.length > 0 ? components.reduce((min, c) => (c.sub < min.sub ? c : min)).key : null;
+    components.length > 0
+      ? components.reduce((max, c) => (deficit(c) > deficit(max) ? c : max)).key
+      : null;
 
   const lowConfidence =
     present.length < MIN_COMPONENTS ||

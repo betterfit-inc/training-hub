@@ -62,8 +62,13 @@ async function buildHrv(today: string): Promise<{ context: HrvContext; z7: numbe
     shiftDays(today, -HRV_BASELINE_WINDOW_DAYS),
     today
   );
-  const ln = series.filter((p) => p.value > 0).map((p) => Math.log(p.value));
-  if (ln.length === 0) return null;
+  const valid = series.filter((p) => p.value > 0);
+  if (valid.length === 0) return null;
+  // Require a same-day HRV reading: a stale value must not drive today's readiness
+  // or the HRV-modulated recovery drain. Absent today -> omit HRV entirely.
+  const latest = valid[valid.length - 1];
+  if (latest.date !== today) return null;
+  const ln = valid.map((p) => Math.log(p.value));
   const todayLn = ln[ln.length - 1];
   const baseline7 = mean(ln.slice(-HRV_ROLLING_DAYS)) ?? todayLn;
   const mean60 = mean(ln) ?? todayLn;
@@ -193,6 +198,17 @@ export async function getRecoveryState(now = new Date().toISOString()): Promise<
      ORDER BY a.started_at ASC`,
     [since]
   );
+
+  // Cheap presence check: with no recent load rows there is no debt, so skip the
+  // full PMC fold + threshold/HRV reads entirely (the common/empty path — this
+  // runs in the root layout on every request).
+  if (rows.length === 0) {
+    return computeRecovery(
+      [],
+      { ctl: 0, tsb: 0, hrvStatus: null, restingHr: null, lthr: null },
+      now
+    );
+  }
 
   const activities: RecoveryActivity[] = rows.map((r) => {
     const startMs = new Date(r.started_at as string).getTime();

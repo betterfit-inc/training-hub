@@ -100,7 +100,7 @@ export function RecoveryBadge({ data }: { data: RecoveryBadgeData }) {
           {data.contributions.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t.health.recovery.noContributions}</p>
           ) : (
-            <ul className="space-y-1.5">
+            <ul className="max-h-64 space-y-1.5 overflow-y-auto">
               {data.contributions.map((c) => {
                 const positive = c.addedHours >= 0;
                 return (

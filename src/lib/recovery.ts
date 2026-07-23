@@ -78,6 +78,10 @@ export interface RecoveryResult {
 // and adds ~0 debt. Z1–low-Z2 territory.
 const IF_FLOOR = 0.75;
 
+// Cap on the intensity implied from TSS+duration (the last-resort fallback), so
+// a stray high stored load can't produce an absurd intensity.
+const IF_FALLBACK_CAP = 1.3;
+
 // A 1-hour session at threshold (IF 1.0) with reference fitness costs this many
 // hours of debt before state/fitness modulation.
 const BASE_COST_HOURS = 24;
@@ -139,7 +143,12 @@ function durationHours(activity: RecoveryActivity, intensity: number | null): nu
   return 0;
 }
 
-/** Best-available intensity factor: stored IF, else implied by HR vs thresholds. */
+/**
+ * Best-available intensity factor: stored IF, else implied by HR vs thresholds,
+ * else a bounded fallback implied by the stored load and duration (so RPE-only
+ * or manually-loaded sessions still contribute instead of being silently
+ * dropped). TSS = hours·IF²·100  =>  IF = sqrt(TSS / (hours·100)).
+ */
 function resolveIntensity(activity: RecoveryActivity, ctx: RecoveryContext): number | null {
   if (activity.intensityFactor != null) return activity.intensityFactor;
   if (
@@ -149,6 +158,10 @@ function resolveIntensity(activity: RecoveryActivity, ctx: RecoveryContext): num
     ctx.lthr > ctx.restingHr
   ) {
     return (activity.avgHr - ctx.restingHr) / (ctx.lthr - ctx.restingHr);
+  }
+  if (activity.tss != null && activity.tss > 0 && activity.durationS && activity.durationS > 0) {
+    const hours = activity.durationS / 3600;
+    return Math.min(Math.sqrt(activity.tss / (hours * 100)), IF_FALLBACK_CAP);
   }
   return null;
 }
@@ -205,8 +218,13 @@ export function computeRecovery(
   const drainRate = DRAIN_RATE_BASE * HRV_DRAIN_MULT[ctx.hrvStatus ?? "normal"];
   const nowMs = new Date(now).getTime();
 
+  // Only activities that have actually finished by `now` count — a future-dated
+  // session must not add debt before it happens (keeps the result valid at asOf).
   const ordered = [...activities]
-    .filter((a) => !Number.isNaN(new Date(a.finishedAt).getTime()))
+    .filter((a) => {
+      const at = new Date(a.finishedAt).getTime();
+      return !Number.isNaN(at) && at <= nowMs;
+    })
     .sort((a, b) => new Date(a.finishedAt).getTime() - new Date(b.finishedAt).getTime());
 
   let debt = 0;

@@ -368,7 +368,7 @@ export default async function ActivityPage({ params }: PageProps<"/activity/[id]
             <CardTitle>{t.chart.analysis}</CardTitle>
           </CardHeader>
           <CardContent>
-            <ActivityChart streams={streams} isRun={run} isRide={ride} />
+            <ActivityChart activityId={activity.id} streams={streams} isRun={run} isRide={ride} />
           </CardContent>
         </Card>
       ) : null}

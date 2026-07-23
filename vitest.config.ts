@@ -3,8 +3,11 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
+    // Default environment stays node so the pure-engine `src/lib/*.test.ts`
+    // suites are unaffected. Component tests opt into jsdom per-file via a
+    // `// @vitest-environment jsdom` pragma at the top of the file.
     environment: "node",
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.{ts,tsx}"],
   },
   resolve: {
     alias: {

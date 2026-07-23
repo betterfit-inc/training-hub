@@ -61,10 +61,12 @@ function extent(data: (number | null)[]): [number, number] | null {
 }
 
 export function ActivityChart({
+  activityId,
   streams,
   isRun,
   isRide,
 }: {
+  activityId: number;
   streams: ActivityStreams;
   isRun: boolean;
   isRide: boolean;
@@ -151,6 +153,18 @@ export function ActivityChart({
   const [active, setActive] = useState<Set<SeriesKey>>(defaultActive);
   const [xMode, setXMode] = useState<XMode>("distance");
   const [hover, setHover] = useState<number | null>(null);
+
+  // Client-side navigation between two /activity/[id] pages can reuse this same
+  // component instance, so per-activity view state would otherwise persist and
+  // show the previous activity's default series. Resync during render when the
+  // activity changes (React's "adjust state on prop change" pattern, no effect).
+  const [prevActivityId, setPrevActivityId] = useState(activityId);
+  if (activityId !== prevActivityId) {
+    setPrevActivityId(activityId);
+    setActive(defaultActive);
+    setXMode("distance");
+    setHover(null);
+  }
 
   const timeAvailable = streams.timeS.some((v) => v != null);
   const distAvailable = streams.distanceKm.some((v) => v != null);

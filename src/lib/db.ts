@@ -21,7 +21,9 @@ export const UPLOADS_DIR = path.join(DATA_DIR, "uploads");
 const LOCAL_URL = "file:data/app.db";
 
 function makeClient(): Client {
-  const url = process.env.TURSO_DATABASE_URL || LOCAL_URL;
+  // DATABASE_URL is a local-only override for an isolated SQLite file (E2E tests
+  // point it at data/e2e.db). Unset in dev/prod, so the default path is unchanged.
+  const url = process.env.TURSO_DATABASE_URL || process.env.DATABASE_URL || LOCAL_URL;
   if (url.startsWith("file:")) fs.mkdirSync(DATA_DIR, { recursive: true });
   return createClient({
     url,

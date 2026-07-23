@@ -36,10 +36,12 @@ import {
   updateActivityJournal,
   updateBike,
   updateShoe,
+  upsertHealthMetrics,
   confirmActivity,
   type BikeFields,
   type ShoeFields,
 } from "./db";
+import { SUBJECTIVE_SCALE, snapshotToMetrics } from "./health";
 import {
   buildActivityContext,
   buildDigestContext,
@@ -728,5 +730,67 @@ export async function generateWeeklyDigestAction(): Promise<WeeklyDigestResult> 
     return { ok: true, text: saved.text, generatedAt: saved.generatedAt };
   } catch (error) {
     return fail(error, t.errors.coachFailed);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Health — manual morning check-in (the in-app HealthSource adapter). Writes
+// `source: 'manual'` rows; device syncs write their own source and win by
+// default in the resolver, so a later device value never clobbers these.
+// ---------------------------------------------------------------------------
+
+export interface HealthEntryInput {
+  date: string;
+  fatigue: number | null;
+  soreness: number | null;
+  stress: number | null;
+  mood: number | null;
+  weight: number | null;
+  sickness: boolean;
+  injury: boolean;
+}
+
+export async function saveHealthEntryAction(input: HealthEntryInput): Promise<ActionResult> {
+  const t = await dict();
+  if (!(await requireAuth())) return { ok: false, error: t.errors.unauthorized };
+  try {
+    // Range-check the ratings the trust boundary owns (the pure normalizer only
+    // NaN-guards). Blank fields arrive as null and are simply not recorded.
+    const ratings = [input.fatigue, input.soreness, input.stress, input.mood];
+    for (const rating of ratings) {
+      if (rating !== null && !inRange(rating, SUBJECTIVE_SCALE.min, SUBJECTIVE_SCALE.max)) {
+        return { ok: false, error: t.errors.invalidHealthEntry };
+      }
+    }
+    if (input.weight !== null && !inRange(input.weight, 20, 400)) {
+      return { ok: false, error: t.errors.invalidHealthEntry };
+    }
+
+    // Reuse the ingest normalizer so manual and device paths share one shape +
+    // validation. sickness/injury are recorded every save (0 or 1) so a cleared
+    // flag is captured, not just a set one.
+    const normalized = snapshotToMetrics(
+      {
+        date: input.date,
+        source: "manual",
+        weight: input.weight,
+        subjective: {
+          fatigue: input.fatigue,
+          soreness: input.soreness,
+          stress: input.stress,
+          mood: input.mood,
+          sickness: input.sickness ? 1 : 0,
+          injury: input.injury ? 1 : 0,
+        },
+      },
+      new Date().toISOString()
+    );
+    if ("error" in normalized) return { ok: false, error: t.errors.invalidDate };
+
+    await upsertHealthMetrics(normalized.rows);
+    refreshAll();
+    return { ok: true };
+  } catch (error) {
+    return fail(error, t.errors.generic);
   }
 }

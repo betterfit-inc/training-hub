@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/components/i18n-provider";
 import { AutoSync, SyncButton } from "@/components/sync-button";
+import { RecoveryBadge, type RecoveryBadgeData } from "@/components/recovery-badge";
 import { logoutAction, setLangAction } from "@/lib/actions";
 import type { Lang } from "@/lib/i18n";
 
@@ -48,6 +49,7 @@ const NAV = [
   { href: "/insights", key: "insights" },
   { href: "/fitness", key: "fitness" },
   { href: "/performance", key: "performance" },
+  { href: "/health", key: "health" },
   { href: "/races", key: "races" },
   { href: "/review", key: "review" },
   { href: "/shoes", key: "shoes" },
@@ -113,12 +115,14 @@ export function Header({
   configured,
   autoSync,
   auth,
+  recovery,
 }: {
   pendingCount: number;
   connected: boolean;
   configured: boolean;
   autoSync: boolean;
   auth: AuthControl;
+  recovery: RecoveryBadgeData | null;
 }) {
   const pathname = usePathname();
   const { t } = useI18n();
@@ -126,7 +130,7 @@ export function Header({
   return (
     <header className="sticky top-0 z-40 border-b border-border/70 bg-background/80 backdrop-blur-md">
       {autoSync && configured ? <AutoSync /> : null}
-      <div className="mx-auto flex h-14 max-w-5xl items-center gap-4 px-4 sm:gap-6 sm:px-6">
+      <div className="mx-auto flex h-14 max-w-7xl items-center gap-4 px-4 sm:gap-5 sm:px-6">
         <Link href="/" className="flex shrink-0 items-center gap-1.5">
           <span className="font-display text-xl font-bold italic tracking-tight">Training Hub</span>
           <span aria-hidden className="mt-1.5 inline-block size-1.5 rounded-full bg-primary" />
@@ -157,6 +161,7 @@ export function Header({
         </nav>
 
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
+          {recovery ? <RecoveryBadge data={recovery} /> : null}
           <SyncButton connected={connected} />
           <LangToggle />
           <ThemeToggle />

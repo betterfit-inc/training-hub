@@ -61,7 +61,7 @@ import {
   syncActivities,
   type SyncResult,
 } from "./strava";
-import { validateSplits } from "./validate";
+import { parseId, validateSplits } from "./validate";
 import { fail, type ActionResult } from "./action-result";
 import type { Feeling, SplitInput } from "./types";
 
@@ -342,8 +342,14 @@ export async function resetActivityLoadAction(activityId: number): Promise<Actio
 export async function saveShoeAction(formData: FormData): Promise<ActionResult> {
   const t = await dict();
   try {
+    // An absent/blank id means "create"; a present-but-invalid id must NOT
+    // silently fall through to create a stray row (G6.4).
     const idRaw = formData.get("id");
-    const id = typeof idRaw === "string" && idRaw ? Number(idRaw) : null;
+    let id: number | null = null;
+    if (typeof idRaw === "string" && idRaw.trim() !== "") {
+      id = parseId(idRaw);
+      if (id === null) return { ok: false, error: t.errors.invalidId };
+    }
 
     const name = String(formData.get("name") ?? "").trim();
     if (!name) return { ok: false, error: t.errors.shoeNeedsName };
@@ -422,8 +428,14 @@ export async function setShoeGearAction(
 export async function saveBikeAction(formData: FormData): Promise<ActionResult> {
   const t = await dict();
   try {
+    // An absent/blank id means "create"; a present-but-invalid id must NOT
+    // silently fall through to create a stray row (G6.4).
     const idRaw = formData.get("id");
-    const id = typeof idRaw === "string" && idRaw ? Number(idRaw) : null;
+    let id: number | null = null;
+    if (typeof idRaw === "string" && idRaw.trim() !== "") {
+      id = parseId(idRaw);
+      if (id === null) return { ok: false, error: t.errors.invalidId };
+    }
 
     const name = String(formData.get("name") ?? "").trim();
     if (!name) return { ok: false, error: t.errors.bikeNeedsName };

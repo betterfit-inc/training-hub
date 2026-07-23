@@ -172,6 +172,11 @@ export async function confirmActivityAction(input: {
     const bikeId = input.bikeId != null && (await getBike(input.bikeId)) ? input.bikeId : null;
 
     await confirmActivity(input.activityId, journal, splits, bikeId);
+    // Compute this activity's training load on confirm so it immediately counts
+    // toward the fitness PMC, the recovery fold and the "recent sessions" list.
+    // Without this, a newly confirmed activity had no activity_load row until the
+    // next threshold save or backfill, so it was silently missing from all three.
+    await recomputeActivityLoad(input.activityId);
     refreshAll();
     return { ok: true };
   } catch (error) {

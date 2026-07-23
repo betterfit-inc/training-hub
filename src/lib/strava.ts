@@ -14,6 +14,7 @@ import {
   setMeta,
 } from "./db";
 import { isRideSport } from "./cycling";
+import { logger } from "./telemetry";
 import { normalizeStreams, type ActivityStreams } from "./streams";
 import type { Activity } from "./types";
 import { round2 } from "./format";
@@ -158,7 +159,8 @@ export async function tryFetchGear(): Promise<StravaGear[] | null> {
   if (!stravaConfigured() || !(await isStravaConnected())) return null;
   try {
     return (await fetchAthleteGear()).shoes;
-  } catch {
+  } catch (error) {
+    logger.error("strava.tryFetchGear", { error });
     return null;
   }
 }
@@ -168,7 +170,8 @@ export async function tryFetchBikes(): Promise<StravaGear[] | null> {
   if (!stravaConfigured() || !(await isStravaConnected())) return null;
   try {
     return (await fetchAthleteGear()).bikes;
-  } catch {
+  } catch (error) {
+    logger.error("strava.tryFetchBikes", { error });
     return null;
   }
 }
@@ -181,7 +184,8 @@ export async function tryFetchAllGear(): Promise<{
   if (!stravaConfigured() || !(await isStravaConnected())) return null;
   try {
     return await fetchAthleteGear();
-  } catch {
+  } catch (error) {
+    logger.error("strava.tryFetchAllGear", { error });
     return null;
   }
 }
@@ -227,7 +231,8 @@ export function parseActivityDetail(json: string | null): StravaActivityDetail |
   try {
     const parsed = JSON.parse(json) as StravaActivityDetail;
     return parsed && typeof parsed === "object" ? parsed : null;
-  } catch {
+  } catch (error) {
+    logger.error("strava.parseActivityDetail", { error });
     return null;
   }
 }
@@ -248,7 +253,8 @@ export async function ensureActivityDetail(
     const detail = await apiGet<StravaActivityDetail>(`/activities/${activity.strava_id}`);
     await saveActivityDetail(activity.id, JSON.stringify(detail));
     return detail;
-  } catch {
+  } catch (error) {
+    logger.error("strava.ensureActivityDetail", { error, activityId: activity.id });
     return null;
   }
 }
@@ -282,7 +288,8 @@ export async function ensureActivityStreams(
     if (!streams) return null;
     await saveActivityStreams(activity.id, JSON.stringify(streams));
     return streams;
-  } catch {
+  } catch (error) {
+    logger.error("strava.ensureActivityStreams", { error, activityId: activity.id });
     return null;
   }
 }

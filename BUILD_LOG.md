@@ -27,6 +27,10 @@ DONE = committed, verify green · SKIPPED = intentionally not done (reason) · B
 | T0.6 | Compose `verify` + GitHub Actions | DONE | `cf1320c` | green | `verify` = typecheck+lint+format:check+test:unit+deadcode+cycles (e2e appended in T0.2). CI workflow runs `verify` on PRs to `main`. |
 | T0.2 | Playwright E2E + seeded local DB + Strava out of loop | DONE | `2bf8d78` | green | Chromium project vs isolated `data/e2e.db` (never TURSO), seeded via existing seed path; blank Strava creds so no external calls. `db.ts` gains a local-only `DATABASE_URL` override (unset in dev/prod → default path byte-identical). 6 e2e specs (log, review, fitness, gear). `test:e2e` folded into `verify`; CI installs chromium. |
 
+| T1.1 | Identity seam (`currentAthlete`/`requireAthlete`) | DONE | `4649de2` | green | New `src/lib/identity.ts` is the single source of the owner id; `db.ts` sources the `strava_auth`/`athlete_thresholds` owner id from it (reads via `currentAthlete()`, writes via `requireAthlete()` — the future auth chokepoint). Behavior-preserving (resolves to id 1); no `athlete_id` columns; `CHECK (id=1)` schema untouched. |
+
+| T1.2 | Telemetry seam + fix silent catches | DONE | _(this commit)_ | green | New `src/lib/telemetry.ts`: `logger` (structured console → captured by Vercel Observability) + `track()` no-op stub (usage analytics deferred behind the seam). The 6 bare `catch {}` in `strava.ts` now log through the seam before returning their unchanged fallback (behavior-preserving). `storage.ts` left untouched: it has no silent catches in the current tree (assessment claim was stale) — adding one would have introduced a new swallow. One silent catch remains in `db.ts` (out of scope). |
+
 **M0 acceptance met:** `npm run verify` is green on `build/overnight` (independently re-run by the orchestrator, exit 0, incl. 6 Playwright specs), runs against a local sqlite file only, and CI is wired to run it on every PR.
 
 ### Discovered during M0 (not in the backlog — flag for later)

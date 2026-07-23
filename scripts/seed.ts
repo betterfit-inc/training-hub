@@ -12,6 +12,29 @@ import type { Feeling } from "../src/lib/types";
 const SEED_MARKER = '{"seed":true}';
 const SEED_FILTER = "json_extract(raw_json, '$.seed') = 1";
 
+/**
+ * Guard against seeding a remote (shared/prod Turso) database. Resolves the DB URL
+ * exactly like src/lib/db.ts (TURSO_DATABASE_URL → DATABASE_URL → local file). A
+ * file: URL (local dev, or the isolated e2e DB) runs normally; a remote URL refuses
+ * unless the writer explicitly opts in with ALLOW_REMOTE_DB=1 or --force.
+ */
+function assertLocalDb(): void {
+  const url = process.env.TURSO_DATABASE_URL || process.env.DATABASE_URL || "file:data/app.db";
+  if (url.startsWith("file:")) return;
+  if (process.env.ALLOW_REMOTE_DB === "1" || process.argv.includes("--force")) return;
+  let host = url;
+  try {
+    host = new URL(url).host || url;
+  } catch {
+    // Not a parseable URL; fall back to showing the raw value.
+  }
+  console.error(
+    `Refusing to seed a remote database (${host}). This protects the shared/prod DB. ` +
+      `Re-run with ALLOW_REMOTE_DB=1 to override.`
+  );
+  process.exit(1);
+}
+
 async function clearSeeds(): Promise<number> {
   const results = await client.batch(
     [
@@ -24,6 +47,7 @@ async function clearSeeds(): Promise<number> {
 }
 
 async function main() {
+  assertLocalDb();
   await ensureMigrated();
 
   if (process.argv.includes("--clear")) {

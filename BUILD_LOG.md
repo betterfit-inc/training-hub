@@ -35,6 +35,11 @@ DONE = committed, verify green · SKIPPED = intentionally not done (reason) · B
 
 | T1.3 | Speed Insights | DONE | _(this commit)_ | green | Added `@vercel/speed-insights` (runtime dep, first-party) and rendered `<SpeedInsights />` in the root layout. Web Analytics stays deferred behind the telemetry `track()` seam (documented, not wired). No-op off-Vercel so e2e unaffected. |
 
+| T1.5 | Split dev/prod databases (guard + docs) | DONE (SIGN-OFF) | _(this commit)_ | green | **Behavior-changing, labeled.** `scripts/seed.ts` + `scripts/backfill-load.ts` now REFUSE to run against any non-`file:` (remote/Turso) DB by default (`ALLOW_REMOTE_DB=1` or `--force` overrides), protecting the shared prod DB. `.env.example`/README document the dev(local `data/app.db`)↔prod(Turso) split. `makeClient()` resolution unchanged. Local + e2e file DBs unaffected. **Risk:** any existing workflow that intentionally seeds/backfills prod must now pass `ALLOW_REMOTE_DB=1`. Fully reversible (revert the two scripts). |
+| T1.6 | Auth boundary | PENDING | — | — | Deliberately LAST (after M2 + M3), per the leverage order. Minimal single-owner first cut. |
+
+**M1 seams checkpoint:** full `npm run verify` (incl. 6 Playwright e2e) re-run by the orchestrator after T1.1–T1.5 — green.
+
 **M0 acceptance met:** `npm run verify` is green on `build/overnight` (independently re-run by the orchestrator, exit 0, incl. 6 Playwright specs), runs against a local sqlite file only, and CI is wired to run it on every PR.
 
 ### Discovered during M0 (not in the backlog — flag for later)

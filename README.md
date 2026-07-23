@@ -8,7 +8,7 @@ The core idea: synced activities land in a review queue. Nothing counts toward s
 
 - Next.js (App Router) with TypeScript, server components and server actions
 - shadcn/ui and Tailwind CSS
-- SQLite through libSQL, plain SQL, no ORM. Local development uses the file `data/app.db`; deployments point `TURSO_DATABASE_URL` at a Turso database. Created and migrated automatically on first run either way
+- SQLite through libSQL, plain SQL, no ORM. Dev and prod use separate databases: local development uses the file `data/app.db`, and only the deployment points `TURSO_DATABASE_URL` at the Turso database. Leave `TURSO_*` empty locally so your machine never touches prod. Created and migrated automatically on first run either way
 - Shoe photos go to `data/uploads/` locally (served by a small file route) and to Vercel Blob when deployed
 
 ## Setup
@@ -49,6 +49,8 @@ npm run seed:clear  # removes only the fake activities
 ```
 
 Seeding uses the real shoes from the baseline migration and never touches them or their mileage baselines.
+
+The write scripts (`npm run seed`, `npm run seed:clear`, `npm run backfill:load`) are guarded: they only run against a local `file:` database. If the resolved URL is remote (a Turso/`libsql://`, `http://`, or `https://` URL, i.e. `TURSO_DATABASE_URL` is set), they refuse so a stray env var can't rewrite the shared/prod DB from your machine. Override deliberately with `ALLOW_REMOTE_DB=1` (or `--force`).
 
 ## How the review flow works
 

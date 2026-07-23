@@ -38,6 +38,8 @@ export async function listRunEfforts(): Promise<RunEffort[]> {
       movingTimeS: row.moving_time_s ?? 0,
       isRace: sqliteBool(row.is_race),
       name: row.name,
+      // Preserve the real sport so the engine can drop trail from road efforts.
+      sportType: row.sport_type,
       date: row.date,
     }));
 }

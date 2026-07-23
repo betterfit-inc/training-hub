@@ -16,6 +16,14 @@ export interface AthleteThresholds {
   updatedAt: string | null;
 }
 
+/**
+ * Accepted stored threshold-pace range in s/km — the bounds saveThresholdsAction
+ * enforces. Shared so the Performance page's "apply suggested pace" control can
+ * suppress an apply that the save would reject (a slow race can imply a pace
+ * above the ceiling) instead of offering a button that always fails validation.
+ */
+export const THRESHOLD_PACE_RANGE = { min: 120, max: 600 } as const;
+
 /** Which signal a TSS value was derived from, best (power) to weakest (rpe). */
 export type LoadMethod = "power" | "pace" | "hr" | "rpe";
 

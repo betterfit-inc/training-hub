@@ -19,6 +19,12 @@ export interface RunEffort {
   movingTimeS: number;
   isRace: boolean;
   name: string | null;
+  /**
+   * The activity's real Strava `sport_type` (e.g. "Run", "TrailRun"). Passed
+   * through to `raceCategory` so trail runs are excluded from road benchmarks
+   * even when their NAME does not say "trail".
+   */
+  sportType: string | null;
   /** Local calendar date/ISO of the effort, for display; not used in the math. */
   date: string | null;
 }
@@ -75,16 +81,32 @@ function toStandardDistance(category: RaceCategory): StandardDistance | null {
   }
 }
 
+// A summary only counts toward a standard distance when its measured length is
+// within this fraction of the canonical distance. `raceCategory` uses broad,
+// contiguous UI bands (e.g. any 0 < km < 8 snaps to "5k"), so without this a
+// 3 km jog would masquerade as a 5k best effort and skew the ladder/Riegel
+// anchor. ±10% keeps genuine 5k/10k/half efforts while rejecting stray short or
+// odd-length runs that merely land in a band.
+export const STANDARD_DISTANCE_TOLERANCE = 0.1;
+
 /** The standard-distance bucket an effort falls in, or null if it is not one. */
 function distanceOf(effort: RunEffort): StandardDistance | null {
-  // Reuse the app's canonical distance bucketer; sport is a run by construction
-  // (the data query only feeds run-type efforts here).
+  // Reuse the app's canonical distance bucketer, feeding it the effort's REAL
+  // sport so trail runs are excluded exactly as raceCategory intends.
   const category = raceCategory({
     name: effort.name,
-    sport_type: "Run",
+    sport_type: effort.sportType,
     distance_km: effort.distanceKm,
   });
-  return toStandardDistance(category);
+  const standard = toStandardDistance(category);
+  if (!standard) return null;
+  // Band membership alone is too loose (the bands are contiguous UI bands, not
+  // race distances): require the length to sit within tolerance of the canonical
+  // distance before treating it as a genuine effort at that distance.
+  const meters = effort.distanceKm * METERS_PER_KM;
+  const canonical = STANDARD_DISTANCE_M[standard];
+  if (Math.abs(meters - canonical) > canonical * STANDARD_DISTANCE_TOLERANCE) return null;
+  return standard;
 }
 
 function paceSPerKm(effort: { distanceKm: number; movingTimeS: number }): number {

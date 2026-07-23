@@ -490,6 +490,7 @@ export const en = {
     coverage: "Based on {n} race distances",
     apply: "Use as threshold pace",
     applied: "Threshold pace updated",
+    applyOutOfRange: "Outside the accepted range",
     csEmpty: "Mark at least 2 races at different distances to estimate your critical speed.",
     predictions: "Race predictions",
     predictionsBody:

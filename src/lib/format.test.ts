@@ -47,6 +47,13 @@ describe("duration formatting", () => {
   it("formats hours and minutes compactly", () => {
     expect(fmtHoursMin(5915)).toBe("1h 39m");
   });
+
+  // Riegel predictions are fractional seconds. Rounding the total (not just the
+  // seconds remainder) must roll the minute/hour over instead of printing 34:60.
+  it("rolls fractional seconds over the minute boundary", () => {
+    expect(fmtDuration(2099.6)).toBe("35:00"); // 34:59.6 -> 35:00, not 34:60
+    expect(fmtDuration(3599.6)).toBe("1:00:00"); // rolls the hour over too
+  });
 });
 
 describe("round2", () => {

@@ -14,6 +14,7 @@ function effort(overrides: Partial<RunEffort> = {}): RunEffort {
     movingTimeS: 2400,
     isRace: false,
     name: null,
+    sportType: "Run",
     date: null,
     ...overrides,
   };
@@ -40,6 +41,37 @@ describe("bestEffortsByDistance", () => {
       effort({ distanceKm: 10, movingTimeS: 2520, name: "Serra Trail Run" }),
     ]);
     expect(best).toEqual([]);
+  });
+
+  it("excludes a TrailRun sport even when the name says nothing about trail", () => {
+    // A half-length effort. As a "Run" it is a half best effort; as a "TrailRun"
+    // it must be dropped from road benchmarks even though the name is neutral.
+    const road = bestEffortsByDistance([
+      effort({ distanceKm: 21, movingTimeS: 6000, sportType: "Run", name: "Sunday Long" }),
+    ]);
+    expect(road.map((b) => b.distance)).toEqual(["half"]);
+
+    const trail = bestEffortsByDistance([
+      effort({ distanceKm: 21, movingTimeS: 6000, sportType: "TrailRun", name: "Sunday Long" }),
+    ]);
+    expect(trail).toEqual([]);
+  });
+
+  it("only counts efforts within tolerance of the standard distance", () => {
+    // A 3 km jog buckets into the "5k" UI band but is far from 5000 m: excluded.
+    expect(bestEffortsByDistance([effort({ distanceKm: 3, movingTimeS: 900 })])).toEqual([]);
+    // A genuine 5.0 km and a 4.8 km (within ±10%) both count as a 5k.
+    expect(
+      bestEffortsByDistance([effort({ distanceKm: 5.0, movingTimeS: 1200 })]).map((b) => b.distance)
+    ).toEqual(["5k"]);
+    expect(
+      bestEffortsByDistance([effort({ distanceKm: 4.8, movingTimeS: 1200 })]).map((b) => b.distance)
+    ).toEqual(["5k"]);
+    // Boundary at ±10%: 4.5 km (exactly 10% short) is included; 4.49 km is not.
+    expect(
+      bestEffortsByDistance([effort({ distanceKm: 4.5, movingTimeS: 1200 })]).map((b) => b.distance)
+    ).toEqual(["5k"]);
+    expect(bestEffortsByDistance([effort({ distanceKm: 4.49, movingTimeS: 1200 })])).toEqual([]);
   });
 });
 
@@ -80,6 +112,23 @@ describe("estimateCriticalSpeed", () => {
       effort({ distanceKm: 5.05, movingTimeS: 1180, isRace: true }),
     ]);
     expect(result).toBeNull();
+  });
+
+  it("excludes a TrailRun race from the fit", () => {
+    // 5k race + a 21 km TrailRun race: with trail dropped only ONE road distance
+    // remains, so the fit is under-determined. As a plain Run it would fit.
+    const withTrail = estimateCriticalSpeed([
+      effort({ distanceKm: 5, movingTimeS: 1200, isRace: true, sportType: "Run" }),
+      effort({ distanceKm: 21.0975, movingTimeS: 5700, isRace: true, sportType: "TrailRun" }),
+    ]);
+    expect(withTrail).toBeNull();
+
+    const withRoad = estimateCriticalSpeed([
+      effort({ distanceKm: 5, movingTimeS: 1200, isRace: true, sportType: "Run" }),
+      effort({ distanceKm: 21.0975, movingTimeS: 5700, isRace: true, sportType: "Run" }),
+    ]);
+    expect(withRoad).not.toBeNull();
+    expect(withRoad!.points).toHaveLength(2);
   });
 
   it("ignores non-race efforts so easy runs do not bias the fit", () => {

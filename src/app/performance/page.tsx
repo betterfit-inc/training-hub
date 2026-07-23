@@ -137,7 +137,6 @@ export default async function PerformancePage() {
                       {fillStr(tp.coverage, { n: criticalSpeed.points.length })}
                     </p>
                     <ApplyThresholdPaceButton
-                      thresholds={thresholds}
                       suggestedPaceSPerKm={criticalSpeed.thresholdPaceSPerKm}
                     />
                   </div>

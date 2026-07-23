@@ -21,6 +21,16 @@ const mocks = vi.hoisted(() => {
     }),
     saveAthleteThresholds: vi.fn(async () => {}),
     recomputeAllLoads: vi.fn(async () => ({ count: 3 })),
+    getAthleteThresholds: vi.fn(async () => ({
+      maxHr: 195,
+      restingHr: 50,
+      lthr: 170,
+      thresholdPaceSPerKm: 300,
+      ftpW: 260,
+      restingHrEstimated: true,
+      ftpProvisional: false,
+      updatedAt: "2026-01-01T00:00:00Z",
+    })),
     revalidatePath: vi.fn(),
   };
 });
@@ -35,9 +45,10 @@ vi.mock("next/headers", () => ({
 vi.mock("./db", () => ({
   saveAthleteThresholds: mocks.saveAthleteThresholds,
   recomputeAllLoads: mocks.recomputeAllLoads,
+  getAthleteThresholds: mocks.getAthleteThresholds,
 }));
 
-import { saveThresholdsAction, type ThresholdsInput } from "./actions";
+import { applyThresholdPaceAction, saveThresholdsAction, type ThresholdsInput } from "./actions";
 
 const VALID: ThresholdsInput = {
   maxHr: 190,
@@ -113,5 +124,38 @@ describe("saveThresholdsAction (T3.7)", () => {
     expect(mocks.saveAthleteThresholds).not.toHaveBeenCalled();
     expect(mocks.after).not.toHaveBeenCalled();
     expect(mocks.recomputeAllLoads).not.toHaveBeenCalled();
+  });
+});
+
+describe("applyThresholdPaceAction (pace-only apply)", () => {
+  it("changes only the pace, preserving the other thresholds read server-side", async () => {
+    const result = await applyThresholdPaceAction(240);
+
+    expect(result).toEqual({ ok: true });
+    // It reads the CURRENT thresholds rather than trusting a client snapshot,
+    // then writes them back with only the pace changed — so a concurrent edit to
+    // maxHr/restingHr/lthr/ftp made after page load is not reverted.
+    expect(mocks.getAthleteThresholds).toHaveBeenCalledTimes(1);
+    expect(mocks.saveAthleteThresholds).toHaveBeenCalledWith({
+      maxHr: 195,
+      restingHr: 50,
+      lthr: 170,
+      thresholdPaceSPerKm: 240,
+      ftpW: 260,
+      restingHrEstimated: true,
+      ftpProvisional: false,
+    });
+    // Recompute is scheduled post-response, not awaited.
+    expect(mocks.after).toHaveBeenCalledTimes(1);
+    expect(mocks.recomputeAllLoads).not.toHaveBeenCalled();
+  });
+
+  it("rejects an out-of-range pace without reading or writing thresholds", async () => {
+    const result = await applyThresholdPaceAction(700);
+
+    expect(result.ok).toBe(false);
+    expect(mocks.getAthleteThresholds).not.toHaveBeenCalled();
+    expect(mocks.saveAthleteThresholds).not.toHaveBeenCalled();
+    expect(mocks.after).not.toHaveBeenCalled();
   });
 });

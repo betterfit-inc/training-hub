@@ -73,11 +73,24 @@ async function main() {
   const DRIVE = shoeId("Adidas Drive RC");
   const SALOMON = shoeId("Salomon S/Lab Ultra 3 V2");
 
-  function startedAt(daysAgo: number, hour: number, minute = 12): string {
+  // The local wall-clock Date for a fixture's declared daysAgo/hour.
+  function seedDate(daysAgo: number, hour: number, minute = 12): Date {
     const d = new Date();
     d.setDate(d.getDate() - daysAgo);
     d.setHours(hour, minute, 0, 0);
-    return d.toISOString();
+    return d;
+  }
+
+  // Strava-style naive-local wall-clock stamp: the LOCAL time with a trailing
+  // "Z", matching start_date_local. Built from the Date's local components so the
+  // declared hour renders at the same wall-clock time on any host timezone (the
+  // date formatters read it with UTC getters). Distinct from the UTC instant.
+  function localWallClock(d: Date): string {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return (
+      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+      `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}Z`
+    );
   }
 
   interface SeedActivity {
@@ -269,10 +282,13 @@ async function main() {
   const replaced = await clearSeeds();
 
   for (const a of ACTIVITIES) {
-    // The seed builds a local wall-clock via setHours, so the same stamp serves as
-    // both the stored instant and the local wall-clock — keeping seeded/e2e data
-    // consistent with synced rows that carry a distinct start_date_local.
-    const started = startedAt(a.daysAgo, a.hour);
+    // started_at is the UTC instant; started_at_local is the naive local
+    // wall-clock (Strava-style trailing "Z"). Keeping them distinct means seeded
+    // rows display/bucket at the declared local time on a non-UTC host, exactly
+    // like synced rows that carry a real start_date_local.
+    const started = seedDate(a.daysAgo, a.hour);
+    const startedAtUtc = started.toISOString();
+    const startedAtLocal = localWallClock(started);
     const result = await client.execute({
       sql: `INSERT INTO activities
             (strava_id, name, sport_type, started_at, started_at_local, distance_km, moving_time_s,
@@ -282,8 +298,8 @@ async function main() {
       args: [
         a.name,
         a.sport,
-        started,
-        started,
+        startedAtUtc,
+        startedAtLocal,
         a.km,
         a.movingS,
         a.km > 0 ? Math.round(a.movingS / a.km) : null,

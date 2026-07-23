@@ -488,6 +488,7 @@ export const pt: Dict = {
     coverage: "Baseado em {n} distâncias de prova",
     apply: "Usar como ritmo de limiar",
     applied: "Ritmo de limiar atualizado",
+    applyOutOfRange: "Fora do intervalo aceito",
     csEmpty:
       "Marque pelo menos 2 provas em distâncias diferentes para estimar sua velocidade crítica.",
     predictions: "Previsões de prova",

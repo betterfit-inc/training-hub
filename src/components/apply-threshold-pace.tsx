@@ -6,38 +6,35 @@ import { Loader2Icon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/components/i18n-provider";
-import { saveThresholdsAction } from "@/lib/actions";
-import type { AthleteThresholds } from "@/lib/fitness";
+import { applyThresholdPaceAction } from "@/lib/actions";
+import { THRESHOLD_PACE_RANGE } from "@/lib/fitness";
 
 /**
  * Explicit, user-initiated apply of the Critical Speed threshold-pace SUGGESTION
  * to the athlete's stored thresholds. Nothing here runs automatically: it posts
- * only on click, and it reuses the existing `saveThresholdsAction` save path
- * (which re-validates ranges and refreshes the fitness curves), carrying every
- * current threshold value unchanged except the threshold pace.
+ * only on click, and it calls a PACE-ONLY server action that re-reads the current
+ * thresholds server-side and changes just the threshold pace — so it never
+ * reverts unrelated threshold edits made after the page loaded.
+ *
+ * A slow race can imply a pace outside the range the save accepts; rather than
+ * offer a button that always fails validation, the apply is suppressed and a
+ * short label explains why.
  */
-export function ApplyThresholdPaceButton({
-  thresholds,
-  suggestedPaceSPerKm,
-}: {
-  thresholds: AthleteThresholds;
-  suggestedPaceSPerKm: number;
-}) {
+export function ApplyThresholdPaceButton({ suggestedPaceSPerKm }: { suggestedPaceSPerKm: number }) {
   const router = useRouter();
   const { t } = useI18n();
   const [pending, startTransition] = useTransition();
 
+  const pace = Math.round(suggestedPaceSPerKm);
+  const outOfRange = pace < THRESHOLD_PACE_RANGE.min || pace > THRESHOLD_PACE_RANGE.max;
+
+  if (outOfRange) {
+    return <span className="text-xs text-muted-foreground">{t.performance.applyOutOfRange}</span>;
+  }
+
   function apply() {
     startTransition(async () => {
-      const result = await saveThresholdsAction({
-        maxHr: thresholds.maxHr,
-        restingHr: thresholds.restingHr,
-        lthr: thresholds.lthr,
-        thresholdPaceSPerKm: Math.round(suggestedPaceSPerKm),
-        ftpW: thresholds.ftpW,
-        restingHrEstimated: thresholds.restingHrEstimated,
-        ftpProvisional: thresholds.ftpProvisional,
-      });
+      const result = await applyThresholdPaceAction(pace);
       if (!result.ok) {
         toast.error(result.error);
         return;

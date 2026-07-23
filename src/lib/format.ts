@@ -93,9 +93,14 @@ export function parsePace(input: string): number | null {
 
 export function fmtDuration(s: number | null | undefined): string {
   if (!s || s <= 0) return "–";
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = Math.round(s % 60);
+  // Round the TOTAL seconds first, then split. Rounding only the seconds
+  // remainder (as before) breaks fractional inputs like Riegel predictions: a
+  // 34:59.6 value would floor the minutes and round the seconds to 60, printing
+  // "34:60" instead of rolling over to "35:00".
+  const total = Math.round(s);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const sec = total % 60;
   if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
   return `${m}:${String(sec).padStart(2, "0")}`;
 }

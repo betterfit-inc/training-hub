@@ -41,7 +41,7 @@ export interface Activity {
   detail_synced_at: string | null;
   bike_id: number | null;
   bike_name: string | null;
-  is_race: number;
+  is_race: boolean;
   goal_pace_s_per_km: number | null;
   created_at: string;
 }
@@ -68,8 +68,8 @@ export interface SplitInput {
 export interface StravaGear {
   id: string;
   name: string;
-  distance?: number;
-  retired?: boolean;
+  distance: number | null;
+  retired: boolean | null;
 }
 
 export interface ShoeOption {

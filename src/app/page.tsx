@@ -108,7 +108,7 @@ function ActivityRow({ activity, lang, t }: { activity: ActivityWithSplits; lang
         <span className="min-w-0">
           <span className="flex items-center gap-1.5">
             <SportIcon sport={activity.sport_type} className="shrink-0" />
-            {activity.is_race === 1 ? (
+            {activity.is_race ? (
               <MedalIcon className="size-3.5 shrink-0 text-primary" aria-label={t.detail.race} />
             ) : null}
             <span className="truncate text-sm font-medium transition-colors group-hover/row:text-primary">

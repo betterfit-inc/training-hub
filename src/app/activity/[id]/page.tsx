@@ -265,7 +265,7 @@ export default async function ActivityPage({ params }: PageProps<"/activity/[id]
         </div>
         <div className="mt-1.5 flex flex-wrap items-center justify-between gap-3">
           <h1 className="flex items-center gap-2 font-display text-3xl font-semibold tracking-tight">
-            {activity.is_race === 1 ? (
+            {activity.is_race ? (
               <MedalIcon className="size-6 shrink-0 text-primary" aria-label={t.detail.race} />
             ) : null}
             {activity.name ?? t.log.untitled}

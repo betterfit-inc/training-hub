@@ -1,0 +1,50 @@
+// @vitest-environment jsdom
+//
+// Component test: runs ONLY in jsdom via the pragma above. All other
+// `src/**/*.test.ts` suites keep the node environment from vitest.config.ts.
+//
+// G8.4: the PMC chart must be keyboard-navigable like activity-chart — the SVG
+// is focusable and arrow keys move the active point (which surfaces the hover
+// tooltip), not pointer-only.
+import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { PmcChart, type PmcSeriesPoint } from "@/components/pmc-chart";
+
+afterEach(cleanup);
+
+// Distinct CTL values (11, 22, 33) so a rounded tooltip value maps to exactly
+// one point and never collides with an axis label (loadMax/tsbMax round to 50).
+const points: PmcSeriesPoint[] = [
+  { date: "2026-01-01", load: 40, ctl: 11, atl: 5, tsb: 6 },
+  { date: "2026-01-02", load: 50, ctl: 22, atl: 7, tsb: 15 },
+  { date: "2026-01-03", load: 60, ctl: 33, atl: 9, tsb: 24 },
+];
+
+describe("PmcChart keyboard navigation (G8.4)", () => {
+  it("is focusable and arrow keys move the active point across the series", () => {
+    render(<PmcChart points={points} weekly={[]} />);
+
+    const svg = screen.getByRole("img", { name: /fitness/i });
+
+    // Focusable like activity-chart's chart SVG (pointer-only had no tabindex).
+    expect(svg.getAttribute("tabindex")).toBe("0");
+
+    // No active point before any interaction: the tooltip values are absent.
+    expect(screen.queryByText("11")).toBeNull();
+
+    // ArrowRight from no selection activates the first point.
+    fireEvent.keyDown(svg, { key: "ArrowRight" });
+    expect(screen.getByText("11")).toBeTruthy();
+
+    // ArrowRight again advances to the second point.
+    fireEvent.keyDown(svg, { key: "ArrowRight" });
+    expect(screen.getByText("22")).toBeTruthy();
+    expect(screen.queryByText("11")).toBeNull();
+
+    // End jumps to the last point; Home returns to the first.
+    fireEvent.keyDown(svg, { key: "End" });
+    expect(screen.getByText("33")).toBeTruthy();
+    fireEvent.keyDown(svg, { key: "Home" });
+    expect(screen.getByText("11")).toBeTruthy();
+  });
+});

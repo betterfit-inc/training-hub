@@ -144,8 +144,8 @@ function mapGear(list: RawGear[] | undefined): StravaGear[] {
   return (list ?? []).map((g) => ({
     id: g.id,
     name: g.name,
-    distance: g.distance,
-    retired: g.retired,
+    distance: g.distance ?? null,
+    retired: g.retired ?? null,
   }));
 }
 

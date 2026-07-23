@@ -353,6 +353,16 @@ async function batchWrite(statements: InStatement[]) {
 // Max statements per batched write, to keep a single transaction bounded.
 const WRITE_CHUNK = 200;
 
+/**
+ * Decode a SQLite integer boolean to a real `boolean` at the read seam. SQLite
+ * has no boolean type, so flags are stored as 0/1 (and read back as numbers, or
+ * null for an absent column). This is the single place that conversion happens,
+ * so domain types can carry `boolean` instead of leaking 0/1 into the UI (G3.6).
+ */
+export function sqliteBool(value: number | null | undefined): boolean {
+  return value != null && value !== 0;
+}
+
 // ---------------------------------------------------------------------------
 // App meta
 // ---------------------------------------------------------------------------
@@ -619,6 +629,15 @@ export async function setActivityRace(
 // Activities
 // ---------------------------------------------------------------------------
 
+// The activities table stores `is_race` as 0/1; SELECT hands it back as a number.
+// `ActivityRow` is that raw shape, decoded to the `boolean`-carrying `Activity`
+// domain type by `decodeActivity` — the one seam where 0/1 becomes a real boolean.
+type ActivityRow = Omit<Activity, "is_race"> & { is_race: number };
+
+function decodeActivity(row: ActivityRow): Activity {
+  return { ...row, is_race: sqliteBool(row.is_race) };
+}
+
 async function attachSplits(activities: Activity[]): Promise<ActivityWithSplits[]> {
   if (activities.length === 0) return [];
   // Read only the splits for the activities in hand instead of the whole table.
@@ -647,17 +666,17 @@ const ACTIVITY_SELECT =
   "SELECT a.*, b.name AS bike_name FROM activities a LEFT JOIN bikes b ON b.id = a.bike_id";
 
 export async function listConfirmedActivities(): Promise<ActivityWithSplits[]> {
-  const activities = await many<Activity>(
+  const rows = await many<ActivityRow>(
     `${ACTIVITY_SELECT} WHERE a.status = 'confirmed' ORDER BY a.started_at DESC, a.id DESC`
   );
-  return attachSplits(activities);
+  return attachSplits(rows.map(decodeActivity));
 }
 
 export async function listPendingActivities(): Promise<ActivityWithSplits[]> {
-  const activities = await many<Activity>(
+  const rows = await many<ActivityRow>(
     `${ACTIVITY_SELECT} WHERE a.status = 'pending_review' ORDER BY a.started_at ASC, a.id ASC`
   );
-  return attachSplits(activities);
+  return attachSplits(rows.map(decodeActivity));
 }
 
 // Wrapped in React's request-scoped cache() so the root layout and the home page,
@@ -670,17 +689,17 @@ export const countPending = cache(async (): Promise<number> => {
 });
 
 export async function getActivity(id: number): Promise<ActivityWithSplits | null> {
-  const activity = await one<Activity>(`${ACTIVITY_SELECT} WHERE a.id = ?`, [id]);
-  if (!activity) return null;
-  const [withSplits] = await attachSplits([activity]);
+  const row = await one<ActivityRow>(`${ACTIVITY_SELECT} WHERE a.id = ?`, [id]);
+  if (!row) return null;
+  const [withSplits] = await attachSplits([decodeActivity(row)]);
   return withSplits;
 }
 
 export async function listRaces(): Promise<ActivityWithSplits[]> {
-  const activities = await many<Activity>(
+  const rows = await many<ActivityRow>(
     `${ACTIVITY_SELECT} WHERE a.is_race = 1 ORDER BY a.started_at DESC, a.id DESC`
   );
-  return attachSplits(activities);
+  return attachSplits(rows.map(decodeActivity));
 }
 
 /** Confirmed activities in [fromIso, toIso), oldest first, for block analysis. */

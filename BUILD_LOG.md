@@ -70,6 +70,8 @@ DONE = committed, verify green · SKIPPED = intentionally not done (reason) · B
 
 | T3.9 | OAuth hardening | DONE (SIGN-OFF) | _(this commit)_ | green | **Behavior-changing, labeled (G11.4).** New `src/lib/crypto.ts` `constantTimeEqual` (node `timingSafeEqual` + length guard, 5 tests); the callback state check now uses it (constant-time). Connect route sets the state cookie `secure` in prod/https (`NODE_ENV===production` or `x-forwarded-proto`/protocol https), keeping `httpOnly`+`lax`; local http dev unaffected. State was already CSPRNG (`randomBytes(16)`). Happy path unchanged. |
 
+| T3.12 | Type-representation fixes | DONE (SIGN-OFF) | _(this commit)_ | green | **Three parts.** (A, G3.6) `is_race` decoded to `boolean` once at the db seam via `sqliteBool` + `decodeActivity` (encode 0/1 on write); the 3 `=== 1` UI comparisons removed (+ a 4th found in `coach.ts`); test-first (`db.bool.test.ts` red pre-helper). (B, G3.3) `StravaGear` `distance?`/`retired?` → `T \| null`; `mapGear` provides explicit `null`; type-only. (C, G8.4) `pmc-chart` now keyboard-navigable (Arrow/Home/End, `tabIndex`, mirrors activity-chart) with a jsdom component test (red pre-fix). 74 unit tests. **Out of scope (noted):** libSQL `Row` objects still reach client components ("Only plain objects…") — a full row→plain mapping is a larger change. |
+
 **M1 seams checkpoint:** full `npm run verify` (incl. 6 Playwright e2e) re-run by the orchestrator after T1.1–T1.5 — green.
 
 **M0 acceptance met:** `npm run verify` is green on `build/overnight` (independently re-run by the orchestrator, exit 0, incl. 6 Playwright specs), runs against a local sqlite file only, and CI is wired to run it on every PR.

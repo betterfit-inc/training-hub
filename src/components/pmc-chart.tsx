@@ -107,6 +107,26 @@ export function PmcChart({ points, weekly }: { points: PmcSeriesPoint[]; weekly:
     setHover(idx);
   };
 
+  // Keyboard navigation across the data points, mirroring activity-chart: arrows
+  // step the active point (from no selection, ArrowRight/Left land on the ends),
+  // Home/End jump to the first/last.
+  const onKey = (e: React.KeyboardEvent<SVGSVGElement>) => {
+    if (n === 0) return;
+    if (e.key === "ArrowRight") {
+      setHover(Math.min(n - 1, (hover == null ? -1 : hover) + 1));
+      e.preventDefault();
+    } else if (e.key === "ArrowLeft") {
+      setHover(Math.max(0, (hover == null ? 1 : hover) - 1));
+      e.preventDefault();
+    } else if (e.key === "Home") {
+      setHover(0);
+      e.preventDefault();
+    } else if (e.key === "End") {
+      setHover(n - 1);
+      e.preventDefault();
+    }
+  };
+
   const hoverX = hover != null ? xPx(hover) : null;
   const hoverPoint = hover != null ? points[hover] : null;
 
@@ -163,10 +183,13 @@ export function PmcChart({ points, weekly }: { points: PmcSeriesPoint[]; weekly:
             width="100%"
             style={{ height: "auto", touchAction: "none" }}
             role="img"
+            tabIndex={0}
             aria-label={t.fitness.title}
             onPointerMove={onMove}
             onPointerDown={onMove}
             onPointerLeave={() => setHover(null)}
+            onKeyDown={onKey}
+            className="outline-none"
           >
             {/* main panel frame + load ticks */}
             <line

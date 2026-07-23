@@ -122,7 +122,7 @@ export function buildActivityContext(input: {
   if (activity.avg_hr) lines.push(`- Avg HR: ${fmtHr(activity.avg_hr)}`);
   if (activity.elevation_gain_m != null)
     lines.push(`- Elevation gain: ${Math.round(activity.elevation_gain_m)} m`);
-  if (activity.is_race === 1) {
+  if (activity.is_race) {
     const goal = activity.goal_pace_s_per_km
       ? `, goal pace ${fmtPace(activity.goal_pace_s_per_km)}`
       : "";

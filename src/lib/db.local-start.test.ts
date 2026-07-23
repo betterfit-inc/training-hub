@@ -1,0 +1,67 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { localStartedAt } from "@/lib/format";
+
+// Round-trip guard for migration 6 (started_at_local). Drives the REAL db.ts
+// client + migrations against an ISOLATED local sqlite file (never Turso), the
+// same pattern as db.fk.test.ts: DATABASE_URL is set BEFORE the dynamic import
+// (db.ts builds its client singleton from env at import time) and TURSO_* is
+// cleared first because makeClient() prefers TURSO_DATABASE_URL.
+
+const dbFile = path.join(os.tmpdir(), `training-hub-local-start-${process.pid}-${Date.now()}.db`);
+
+let db: typeof import("./db");
+
+beforeAll(async () => {
+  delete process.env.TURSO_DATABASE_URL;
+  delete process.env.TURSO_AUTH_TOKEN;
+  process.env.DATABASE_URL = `file:${dbFile}`;
+  db = await import("./db");
+  await db.ensureMigrated();
+});
+
+afterAll(() => {
+  db.client.close();
+  for (const suffix of ["", "-shm", "-wal", "-journal"]) {
+    fs.rmSync(`${dbFile}${suffix}`, { force: true });
+  }
+});
+
+describe("migration 6: started_at_local", () => {
+  it("adds the nullable started_at_local column and records version 6", async () => {
+    const info = await db.client.execute("SELECT name FROM pragma_table_info('activities')");
+    const columns = new Set(info.rows.map((row) => String(row.name)));
+    expect(columns.has("started_at_local")).toBe(true);
+
+    const version = await db.client.execute("SELECT version FROM schema_version WHERE id = 1");
+    expect(Number(version.rows[0].version)).toBeGreaterThanOrEqual(6);
+  });
+
+  it("round-trips a captured local stamp and localStartedAt prefers it", async () => {
+    const inserted = await db.client.execute({
+      sql: `INSERT INTO activities (name, sport_type, started_at, started_at_local, distance_km, status)
+            VALUES (?, 'Run', ?, ?, ?, 'confirmed')`,
+      args: ["evening run", "2026-03-16T00:00:00Z", "2026-03-15T21:00:00Z", 10],
+    });
+    const activity = await db.getActivity(Number(inserted.lastInsertRowid));
+    expect(activity).not.toBeNull();
+    if (!activity) return;
+    expect(activity.started_at_local).toBe("2026-03-15T21:00:00Z");
+    expect(localStartedAt(activity)).toBe("2026-03-15T21:00:00Z");
+  });
+
+  it("falls back to the UTC started_at when the local stamp is null", async () => {
+    const inserted = await db.client.execute({
+      sql: `INSERT INTO activities (name, sport_type, started_at, distance_km, status)
+            VALUES (?, 'Run', ?, ?, 'confirmed')`,
+      args: ["legacy row", "2026-03-16T00:00:00Z", 10],
+    });
+    const activity = await db.getActivity(Number(inserted.lastInsertRowid));
+    expect(activity).not.toBeNull();
+    if (!activity) return;
+    expect(activity.started_at_local).toBeNull();
+    expect(localStartedAt(activity)).toBe("2026-03-16T00:00:00Z");
+  });
+});

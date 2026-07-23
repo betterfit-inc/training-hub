@@ -50,7 +50,7 @@ import {
   type CoachLoad,
   type CoachStreamSummary,
 } from "./coach";
-import { computeLoad } from "./fitness";
+import { computeLoad, THRESHOLD_PACE_RANGE } from "./fitness";
 import {
   ensureActivityStreams,
   stravaConfigured,
@@ -276,7 +276,7 @@ export async function saveThresholdsAction(input: ThresholdsInput): Promise<Acti
       !inRange(maxHr, 120, 230) ||
       !inRange(restingHr, 25, 90) ||
       !inRange(lthr, 90, 220) ||
-      !inRange(thresholdPace, 120, 600) ||
+      !inRange(thresholdPace, THRESHOLD_PACE_RANGE.min, THRESHOLD_PACE_RANGE.max) ||
       !inRange(ftpW, 50, 600) ||
       restingHr >= lthr ||
       lthr > maxHr
@@ -304,6 +304,48 @@ export async function saveThresholdsAction(input: ThresholdsInput): Promise<Acti
         await recomputeAllLoads();
       } catch (error) {
         logger.error("actions.saveThresholds.recompute", { error });
+      }
+    });
+    refreshAll();
+    return { ok: true };
+  } catch (error) {
+    return fail(error, t.errors.generic);
+  }
+}
+
+/**
+ * Applies ONLY the suggested threshold pace, leaving every other threshold as it
+ * currently stands. It reads the stored thresholds server-side and writes them
+ * back with just `thresholdPaceSPerKm` changed, so it never reverts unrelated
+ * edits made after the Performance page loaded (unlike resubmitting a stale
+ * page-load snapshot). Like the full save it re-validates the pace range and
+ * defers the history recompute to after the response.
+ */
+export async function applyThresholdPaceAction(paceSPerKm: number): Promise<ActionResult> {
+  const t = await dict();
+  if (!(await requireAuth())) return { ok: false, error: t.errors.unauthorized };
+  try {
+    const thresholdPace = Math.round(paceSPerKm);
+    if (!inRange(thresholdPace, THRESHOLD_PACE_RANGE.min, THRESHOLD_PACE_RANGE.max)) {
+      return { ok: false, error: t.errors.invalidThresholds };
+    }
+    const current = await getAthleteThresholds();
+    await saveAthleteThresholds({
+      maxHr: current.maxHr,
+      restingHr: current.restingHr,
+      lthr: current.lthr,
+      thresholdPaceSPerKm: thresholdPace,
+      ftpW: current.ftpW,
+      restingHrEstimated: current.restingHrEstimated,
+      ftpProvisional: current.ftpProvisional,
+    });
+    // Pace drives pace-method TSS, so the curves must refresh — deferred past the
+    // response like saveThresholdsAction (the edit above is already persisted).
+    after(async () => {
+      try {
+        await recomputeAllLoads();
+      } catch (error) {
+        logger.error("actions.applyThresholdPace.recompute", { error });
       }
     });
     refreshAll();

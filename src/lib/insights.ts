@@ -1,3 +1,4 @@
+import { localStartedAt } from "./format";
 import { sportCategory, type SportCategory } from "./sports";
 import type { Activity } from "./types";
 
@@ -21,8 +22,10 @@ export interface Insights {
   categories: CategoryStats[];
 }
 
-// started_at is a stored UTC instant, so bucket by its UTC calendar day; local
-// getters would drift the day (and miscount activeDays) with the runtime tz.
+// Bucket by the local wall-clock calendar day. localStartedAt prefers Strava's
+// start_date_local (a naive-local Z-ISO), read with UTC getters so the day is the
+// athlete's true local day, stable across runtimes; rows without a local stamp
+// fall back to the UTC started_at, exactly as before.
 function dayKey(iso: string): string {
   const d = new Date(iso);
   return `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
@@ -68,7 +71,10 @@ export function computeInsights(activities: Activity[], windowDays: number): Ins
 
     const distance = activity.distance_km ?? 0;
     const duration = activity.moving_time_s ?? 0;
-    const day = dayKey(activity.started_at);
+    // Window filtering above uses the UTC instant (correct for an elapsed-time
+    // window); day bucketing uses the local wall-clock so evening activities land
+    // on the athlete's local calendar day.
+    const day = dayKey(localStartedAt(activity) ?? activity.started_at);
 
     sessions += 1;
     km += distance;

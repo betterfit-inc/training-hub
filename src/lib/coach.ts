@@ -7,7 +7,7 @@ import type { DigestActivity } from "./db";
 import type { AthleteThresholds } from "./fitness";
 import type { ActivityStreams } from "./streams";
 import type { ActivityWithSplits } from "./types";
-import { fmtDateLong, fmtDuration, fmtHr, fmtKm, fmtPace } from "./format";
+import { fmtDateLong, fmtDuration, fmtHr, fmtKm, fmtPace, localStartedAt } from "./format";
 
 export const COACH_MODEL = "claude-opus-4-8";
 
@@ -115,7 +115,7 @@ export function buildActivityContext(input: {
   lines.push("WORKOUT");
   lines.push(`- Name: ${activity.name ?? "Untitled"}`);
   lines.push(`- Sport: ${activity.sport_type ?? "unknown"}`);
-  lines.push(`- Date: ${fmtDateLong(activity.started_at)}`);
+  lines.push(`- Date: ${fmtDateLong(localStartedAt(activity))}`);
   if (activity.distance_km != null) lines.push(`- Distance: ${fmtKm(activity.distance_km, 2)}`);
   if (activity.moving_time_s) lines.push(`- Moving time: ${fmtDuration(activity.moving_time_s)}`);
   if (activity.avg_pace_s_per_km) lines.push(`- Avg pace: ${fmtPace(activity.avg_pace_s_per_km)}`);
@@ -210,7 +210,7 @@ export function buildDigestContext(input: {
       if (a.avg_hr) bits.push(fmtHr(a.avg_hr));
       const meta = bits.length > 0 ? ` — ${bits.join(", ")}` : "";
       lines.push(
-        `- ${fmtDateLong(a.started_at)} · ${a.sport_type ?? "activity"}: ${a.name ?? "Untitled"}${meta}`
+        `- ${fmtDateLong(localStartedAt(a))} · ${a.sport_type ?? "activity"}: ${a.name ?? "Untitled"}${meta}`
       );
     }
   }

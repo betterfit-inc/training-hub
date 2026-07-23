@@ -25,7 +25,16 @@ import { SplitsEditor, rowsToSplits } from "@/components/splits-editor";
 import { initForm, type FormState, type Summary } from "@/components/review-flow-form";
 import { Stat, ReviewSummaryScreen, useReviewKeyboard } from "@/components/review-flow-parts";
 import { confirmActivityAction } from "@/lib/actions";
-import { fmtDate, fmtDuration, fmtElev, fmtHr, fmtKm, fmtPace, fmtTime } from "@/lib/format";
+import {
+  fmtDate,
+  fmtDuration,
+  fmtElev,
+  fmtHr,
+  fmtKm,
+  fmtPace,
+  fmtTime,
+  localStartedAt,
+} from "@/lib/format";
 import { fill, splitErrorText } from "@/lib/i18n";
 import { isRunSport, validateSplits } from "@/lib/validate";
 import { BikeSelect } from "@/components/bike-select";
@@ -201,8 +210,8 @@ export function ReviewFlow({
               <span>{current.sport_type ?? ""}</span>
               <span aria-hidden>·</span>
               <span className="font-mono tabular-nums">
-                {fmtDate(current.started_at, lang)}
-                {current.started_at ? `, ${fmtTime(current.started_at)}` : ""}
+                {fmtDate(localStartedAt(current), lang)}
+                {current.started_at ? `, ${fmtTime(localStartedAt(current))}` : ""}
               </span>
             </div>
             <h2 className="mt-1.5 font-display text-2xl font-semibold tracking-tight">

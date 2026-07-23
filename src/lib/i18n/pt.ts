@@ -5,6 +5,7 @@ export const pt: Dict = {
     log: "Diário",
     insights: "Insights",
     fitness: "Fitness",
+    performance: "Desempenho",
     races: "Provas",
     review: "Revisão",
     shoes: "Tênis",
@@ -461,6 +462,39 @@ export const pt: Dict = {
     longestWalk: "Caminhada mais longa",
     activeDaysLabel: "Dias ativos",
     distanceLabel: "Distância",
+  },
+  performance: {
+    title: "Desempenho",
+    subtitle:
+      "Melhores tempos, estimativa de limiar e previsões de prova a partir do seu histórico.",
+    empty: "Nenhuma corrida para analisar ainda",
+    emptyBody: "Confirme algumas corridas e seus melhores tempos e previsões aparecem aqui.",
+    summaryNote:
+      "Tudo a partir dos resumos das atividades — melhores tempos da atividade inteira, não trechos dentro de uma corrida. A potência do ciclismo (FTP) exige streams por segundo e não é coberta aqui.",
+    bestEfforts: "Melhores tempos por distância",
+    bestEffortsBody: "O tempo mais rápido de atividade inteira em cada distância padrão.",
+    distance: "Distância",
+    time: "Tempo",
+    pace: "Ritmo",
+    date: "Data",
+    raceTag: "prova",
+    criticalSpeed: "Estimativa de velocidade crítica",
+    criticalSpeedBody:
+      "Um modelo de 2 parâmetros ajustado aos seus esforços máximos em provas. O ritmo de limiar que ele indica é uma sugestão — não é aplicado automaticamente.",
+    estThresholdPace: "Ritmo de limiar estimado",
+    currentThresholdPace: "Ritmo de limiar atual",
+    csValue: "Velocidade crítica",
+    fitQuality: "Qualidade do ajuste",
+    coverage: "Baseado em {n} distâncias de prova",
+    apply: "Usar como ritmo de limiar",
+    applied: "Ritmo de limiar atualizado",
+    applyOutOfRange: "Fora do intervalo aceito",
+    csEmpty:
+      "Marque pelo menos 2 provas em distâncias diferentes para estimar sua velocidade crítica.",
+    predictions: "Previsões de prova",
+    predictionsBody:
+      "Projeções de Riegel a partir do seu esforço de {ref} ({time}). Apenas estimativas; extrapolar para longe da referência é menos confiável.",
+    predictedTime: "Previsto",
   },
   fitness: {
     title: "Fitness",

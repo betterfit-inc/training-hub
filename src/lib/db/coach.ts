@@ -65,6 +65,7 @@ export interface DigestActivity {
   name: string | null;
   sport_type: string | null;
   started_at: string | null;
+  started_at_local: string | null;
   distance_km: number | null;
   moving_time_s: number | null;
   avg_hr: number | null;
@@ -73,7 +74,7 @@ export interface DigestActivity {
 
 export async function listActivitiesSince(iso: string): Promise<DigestActivity[]> {
   return many<DigestActivity>(
-    `SELECT name, sport_type, started_at, distance_km, moving_time_s, avg_hr, avg_pace_s_per_km
+    `SELECT name, sport_type, started_at, started_at_local, distance_km, moving_time_s, avg_hr, avg_pace_s_per_km
      FROM activities
      WHERE status = 'confirmed' AND started_at IS NOT NULL AND started_at >= ?
      ORDER BY started_at ASC`,

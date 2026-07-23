@@ -4,6 +4,7 @@ import { EmptyState } from "@/components/empty-state";
 import { RaceCompare, type CompareSide, type RaceOption } from "@/components/race-compare";
 import { getAthleteThresholds, listBlockActivities, listRaces } from "@/lib/db";
 import { getDict } from "@/lib/lang";
+import { localStartedAt } from "@/lib/format";
 import { analyzeRace, buildBlock } from "@/lib/blocks";
 import type { AthleteThresholds } from "@/lib/fitness";
 import { raceCategory, type RaceCategory } from "@/lib/races";
@@ -58,7 +59,9 @@ async function buildSide(
     race: {
       id: race.id,
       name: race.name,
-      startedAt: raceStartIso,
+      // raceStartIso stays the UTC instant for the block time-window math above;
+      // the displayed date prefers the local wall-clock.
+      startedAt: localStartedAt(race) ?? race.created_at,
       category: raceCategory(race),
     },
     block,
@@ -106,7 +109,7 @@ export default async function RaceComparePage({ searchParams }: PageProps<"/race
     id: r.id,
     name: r.name ?? t.log.untitled,
     category: raceCategory(r),
-    startedAt: r.started_at ?? r.created_at,
+    startedAt: localStartedAt(r) ?? r.created_at,
   }));
 
   return (

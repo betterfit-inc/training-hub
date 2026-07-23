@@ -238,6 +238,16 @@ const MIGRATIONS: Migration[] = [
   },
   // 5: baseline gear + thresholds + baseline date (empty database only).
   { version: 5, up: seedBaseline },
+  // 6: capture Strava's start_date_local — the activity's naive local wall-clock
+  // (Z-suffixed) — so date/time display and day bucketing reflect the athlete's
+  // true local day. Nullable: rows synced before this column existed stay null
+  // and fall back to the UTC `started_at` until a re-sync backfills them.
+  {
+    version: 6,
+    up: async () => {
+      await addColumnIfMissing("activities", "started_at_local", "TEXT");
+    },
+  },
 ];
 
 async function currentSchemaVersion(): Promise<number> {

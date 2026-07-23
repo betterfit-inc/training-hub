@@ -23,6 +23,7 @@ import {
   fmtHoursMin,
   fmtKm,
   fmtPace,
+  localStartedAt,
   mondayOf,
   weekLabel,
 } from "@/lib/format";
@@ -47,7 +48,7 @@ function groupByWeek(activities: ActivityWithSplits[], lang: Lang): WeekGroup[] 
   const groups: WeekGroup[] = [];
   const byKey = new Map<string, WeekGroup>();
   for (const activity of activities) {
-    const date = new Date(activity.started_at ?? activity.created_at);
+    const date = new Date(localStartedAt(activity) ?? activity.created_at);
     const monday = mondayOf(date);
     const key = `${monday.getFullYear()}-${monday.getMonth()}-${monday.getDate()}`;
     let group = byKey.get(key);
@@ -102,7 +103,7 @@ function ActivityRow({ activity, lang, t }: { activity: ActivityWithSplits; lang
         className="group/row -mx-2 grid grid-cols-[74px_minmax(0,1fr)_auto] items-center gap-x-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-accent/50 lg:grid-cols-[74px_minmax(0,1.35fr)_minmax(0,1fr)_minmax(0,1fr)_92px_minmax(0,0.85fr)]"
       >
         <span className="font-mono text-xs whitespace-nowrap tabular-nums text-muted-foreground">
-          {fmtDate(activity.started_at, lang)}
+          {fmtDate(localStartedAt(activity), lang)}
         </span>
 
         <span className="min-w-0">
@@ -200,7 +201,7 @@ export default async function TrainingLogPage({ searchParams }: PageProps<"/">) 
   const availableCategories = SPORT_CATEGORIES.filter((key) => (counts.get(key) ?? 0) > 0);
   const filterLabel = filter === "all" ? null : t.sports[filter].toLowerCase();
   const oldest = visible[visible.length - 1];
-  const oldestDate = oldest ? (oldest.started_at ?? oldest.created_at) : null;
+  const oldestDate = oldest ? (localStartedAt(oldest) ?? oldest.created_at) : null;
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">

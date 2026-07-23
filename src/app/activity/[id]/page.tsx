@@ -29,7 +29,16 @@ import {
   type StravaSplit,
 } from "@/lib/strava";
 import { fmtCadence, fmtEnergy, fmtPower, fmtSpeed, isRideSport, rideMetrics } from "@/lib/cycling";
-import { fmtDateLong, fmtDuration, fmtElev, fmtHr, fmtKm, fmtPace, fmtTime } from "@/lib/format";
+import {
+  fmtDateLong,
+  fmtDuration,
+  fmtElev,
+  fmtHr,
+  fmtKm,
+  fmtPace,
+  fmtTime,
+  localStartedAt,
+} from "@/lib/format";
 import type { Dict } from "@/lib/i18n";
 import { isRunSport } from "@/lib/validate";
 import { toGearOption } from "@/lib/gear";
@@ -243,9 +252,9 @@ export default async function ActivityPage({ params }: PageProps<"/activity/[id]
           <span>{activity.sport_type ?? ""}</span>
           <span aria-hidden>·</span>
           <span>
-            {fmtDateLong(activity.started_at, lang)}
-            {activity.started_at && fmtTime(activity.started_at) !== "00:00"
-              ? `, ${fmtTime(activity.started_at)}`
+            {fmtDateLong(localStartedAt(activity), lang)}
+            {localStartedAt(activity) && fmtTime(localStartedAt(activity)) !== "00:00"
+              ? `, ${fmtTime(localStartedAt(activity))}`
               : ""}
           </span>
         </div>

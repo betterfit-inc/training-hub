@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import { useI18n } from "@/components/i18n-provider";
 import { saveShoeAction, setShoeRetiredAction } from "@/lib/actions";
+import { NONE } from "@/lib/constants";
 import { fmtKm } from "@/lib/format";
 import { fillStr } from "@/lib/i18n";
 import type { Shoe, StravaGear } from "@/lib/types";
@@ -134,12 +135,12 @@ export function ShoeDialog({
           <div className="space-y-1.5">
             <Label htmlFor="shoe-gear">{t.shoeDialog.gear}</Label>
             {gearList.length > 0 ? (
-              <Select name="strava_gear_id" defaultValue={shoe?.strava_gear_id ?? "none"}>
+              <Select name="strava_gear_id" defaultValue={shoe?.strava_gear_id ?? NONE}>
                 <SelectTrigger id="shoe-gear" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">{t.shoeDialog.notLinked}</SelectItem>
+                  <SelectItem value={NONE}>{t.shoeDialog.notLinked}</SelectItem>
                   {gearList.map((gear) => (
                     <SelectItem key={gear.id} value={gear.id}>
                       <span className="truncate">{gear.name}</span>

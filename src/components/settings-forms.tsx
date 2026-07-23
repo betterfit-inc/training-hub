@@ -21,6 +21,7 @@ import {
   setBikeGearAction,
   setShoeGearAction,
 } from "@/lib/actions";
+import { NONE } from "@/lib/constants";
 import { fmtKm, localDateInputValue } from "@/lib/format";
 import { fillStr } from "@/lib/i18n";
 import type { BikeOption, ShoeOption, StravaGear } from "@/lib/types";
@@ -65,7 +66,7 @@ export function GearMatcher({
   const { t } = useI18n();
 
   function link(shoeId: number, value: string) {
-    const gearId = value === "none" ? null : value;
+    const gearId = value === NONE ? null : value;
     setShoeGearAction(shoeId, gearId).then((result) => {
       if (!result.ok) {
         toast.error(result.error);
@@ -86,12 +87,12 @@ export function GearMatcher({
               <p className="truncate text-xs text-muted-foreground italic">{shoe.role}</p>
             ) : null}
           </div>
-          <Select value={shoe.gearId ?? "none"} onValueChange={(value) => link(shoe.id, value)}>
+          <Select value={shoe.gearId ?? NONE} onValueChange={(value) => link(shoe.id, value)}>
             <SelectTrigger size="sm" className="w-52 shrink-0">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="none">{t.settingsPage.notLinked}</SelectItem>
+              <SelectItem value={NONE}>{t.settingsPage.notLinked}</SelectItem>
               {gear.map((g) => (
                 <SelectItem key={g.id} value={g.id}>
                   <span className="truncate">{g.name}</span>
@@ -121,7 +122,7 @@ export function BikeMatcher({
   const { t } = useI18n();
 
   function link(bikeId: number, value: string) {
-    const gearId = value === "none" ? null : value;
+    const gearId = value === NONE ? null : value;
     setBikeGearAction(bikeId, gearId).then((result) => {
       if (!result.ok) {
         toast.error(result.error);
@@ -142,12 +143,12 @@ export function BikeMatcher({
               <p className="truncate text-xs text-muted-foreground italic">{bike.role}</p>
             ) : null}
           </div>
-          <Select value={bike.gearId ?? "none"} onValueChange={(value) => link(bike.id, value)}>
+          <Select value={bike.gearId ?? NONE} onValueChange={(value) => link(bike.id, value)}>
             <SelectTrigger size="sm" className="w-52 shrink-0">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="none">{t.settingsPage.notLinked}</SelectItem>
+              <SelectItem value={NONE}>{t.settingsPage.notLinked}</SelectItem>
               {gear.map((g) => (
                 <SelectItem key={g.id} value={g.id}>
                   <span className="truncate">{g.name}</span>

@@ -10,9 +10,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useI18n } from "@/components/i18n-provider";
+import { NONE } from "@/lib/constants";
 import type { BikeOption } from "@/lib/types";
-
-const NONE = "none";
 
 export function BikeSelect({
   value,

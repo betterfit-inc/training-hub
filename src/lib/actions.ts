@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
+import { NONE } from "./constants";
 import { dictionaries, splitErrorText, isLang, type Dict } from "./i18n";
 import { LANG_COOKIE, getLang } from "./lang";
 import { storePhoto } from "./storage";
@@ -362,8 +363,8 @@ export async function saveShoeAction(formData: FormData): Promise<ActionResult> 
       return { ok: false, error: t.errors.invalidRetirement };
     }
 
-    const gearRaw = String(formData.get("strava_gear_id") ?? "none");
-    const gearId = gearRaw && gearRaw !== "none" ? gearRaw : null;
+    const gearRaw = String(formData.get("strava_gear_id") ?? NONE);
+    const gearId = gearRaw && gearRaw !== NONE ? gearRaw : null;
 
     let photoPath: string | null = null;
     const photo = formData.get("photo");
@@ -438,8 +439,8 @@ export async function saveBikeAction(formData: FormData): Promise<ActionResult> 
       return { ok: false, error: t.errors.invalidBaseline };
     }
 
-    const gearRaw = String(formData.get("strava_gear_id") ?? "none");
-    const gearId = gearRaw && gearRaw !== "none" ? gearRaw : null;
+    const gearRaw = String(formData.get("strava_gear_id") ?? NONE);
+    const gearId = gearRaw && gearRaw !== NONE ? gearRaw : null;
 
     let photoPath: string | null = null;
     const photo = formData.get("photo");

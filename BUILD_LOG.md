@@ -38,6 +38,8 @@ DONE = committed, verify green · SKIPPED = intentionally not done (reason) · B
 | T1.5 | Split dev/prod databases (guard + docs) | DONE (SIGN-OFF) | _(this commit)_ | green | **Behavior-changing, labeled.** `scripts/seed.ts` + `scripts/backfill-load.ts` now REFUSE to run against any non-`file:` (remote/Turso) DB by default (`ALLOW_REMOTE_DB=1` or `--force` overrides), protecting the shared prod DB. `.env.example`/README document the dev(local `data/app.db`)↔prod(Turso) split. `makeClient()` resolution unchanged. Local + e2e file DBs unaffected. **Risk:** any existing workflow that intentionally seeds/backfills prod must now pass `ALLOW_REMOTE_DB=1`. Fully reversible (revert the two scripts). |
 | T1.6 | Auth boundary | PENDING | — | — | Deliberately LAST (after M2 + M3), per the leverage order. Minimal single-owner first cut. |
 
+| T2.5 | `none` sentinel → one named constant | DONE | _(this commit)_ | green | New `src/lib/constants.ts` `export const NONE = "none"`; imported at all sites (`bike-select`, `settings-forms`, `bike-dialog`, `shoe-dialog`, and the matching server reads in `actions.ts`). Value byte-identical → behavior-preserving. Unrelated `"none"` (SVG/CSS) untouched. |
+
 **M1 seams checkpoint:** full `npm run verify` (incl. 6 Playwright e2e) re-run by the orchestrator after T1.1–T1.5 — green.
 
 **M0 acceptance met:** `npm run verify` is green on `build/overnight` (independently re-run by the orchestrator, exit 0, incl. 6 Playwright specs), runs against a local sqlite file only, and CI is wired to run it on every PR.

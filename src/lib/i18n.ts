@@ -365,6 +365,7 @@ const en = {
     goalPace: "goal {pace}/km",
     compare: "Compare",
     categories: {
+      ultra: "Ultra",
       marathon: "Marathon",
       half: "Half marathon",
       "30k": "30K",
@@ -922,6 +923,7 @@ const pt: Dict = {
     goalPace: "alvo {pace}/km",
     compare: "Comparar",
     categories: {
+      ultra: "Ultra",
       marathon: "Maratona",
       half: "Meia maratona",
       "30k": "30K",

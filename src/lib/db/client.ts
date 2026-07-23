@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createClient, type Client } from "@libsql/client";
 
-export type { Client, InStatement } from "@libsql/client";
+export type { Client, InStatement, Row } from "@libsql/client";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 export const UPLOADS_DIR = path.join(DATA_DIR, "uploads");

@@ -668,6 +668,16 @@ export const en = {
       avg7: "7-day average",
       noData: "No trend data yet for this metric.",
     },
+    coach: {
+      title: "Coach read",
+      subtitle: "A morning read on how ready you are to train, from your health signals.",
+      empty: "Generate a morning readiness read from today's signals.",
+      generate: "Get today's read",
+      regenerate: "Refresh read",
+      loading: "Thinking…",
+      generatedAt: "Generated {date} at {time}",
+      notConfigured: "Set ANTHROPIC_API_KEY to enable the coach read.",
+    },
   },
   settingsPage: {
     title: "Settings",

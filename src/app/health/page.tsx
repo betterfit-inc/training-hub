@@ -4,14 +4,17 @@ import { EmptyState } from "@/components/empty-state";
 import { HealthEntryForm, type HealthEntryInitial } from "@/components/health-entry-form";
 import { HealthMetricsPanel } from "@/components/health-metrics-panel";
 import { HealthTrendChart } from "@/components/health-chart";
+import { ReadinessCoach } from "@/components/readiness-coach";
 import { ReadinessSnapshot } from "@/components/readiness-snapshot";
 import {
   getLatestHealthDate,
+  getReadinessNarrative,
   getReadinessSnapshot,
   getRecoveryState,
   getResolvedMetricsForDate,
   getResolvedNumericSeries,
 } from "@/lib/db";
+import { isCoachConfigured } from "@/lib/coach";
 import { getDict } from "@/lib/lang";
 import { fmtDate, fmtDateLong, localDateInputValue, parseLocalDate } from "@/lib/format";
 import { fillStr } from "@/lib/i18n";
@@ -70,6 +73,8 @@ export default async function HealthPage() {
 
   const latestRows = latestDate ? await getResolvedMetricsForDate(latestDate) : [];
   const deviceRecoveryHours = deviceRecoverySeries.at(-1)?.value ?? null;
+  const narrative = await getReadinessNarrative();
+  const coachConfigured = isCoachConfigured();
 
   const trendSeries = await Promise.all(
     TREND_METRICS.map(async (metric) => ({
@@ -163,6 +168,18 @@ export default async function HealthPage() {
           </CardContent>
         </Card>
       </div>
+
+      {snapshot ? (
+        <Card className="mt-5">
+          <CardHeader>
+            <CardTitle>{t.health.coach.title}</CardTitle>
+            <CardDescription>{t.health.coach.subtitle}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ReadinessCoach narrative={narrative} configured={coachConfigured} />
+          </CardContent>
+        </Card>
+      ) : null}
 
       {trends.length > 0 ? (
         <section className="mt-8">

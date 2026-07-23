@@ -32,6 +32,7 @@ The prior-phase log (Phase 3) is preserved below this section.
 | Readiness snapshot + global recovery badge + info popup | DONE (verify green) | `readiness-snapshot.tsx` (score meter, band, component bars, red-flag, low-confidence); `recovery-badge.tsx` in the header decrements live from `asOf` and opens a transparent breakdown dialog (device value shown as secondary). |
 | `/health` page + nav + layout wiring | DONE (verify green) | RSC assembles readiness/recovery/trends/panel/check-in; empty states when no data. Header widened to `max-w-7xl` to fit the 10th nav item + the badge (was overflowing at `max-w-5xl`). |
 | Seed computes `activity_load` | DONE (verify green) | `scripts/seed.ts` now runs `recomputeAllLoads()` via the real write path so fitness/readiness/recovery have data in dev + e2e. |
+| Coach: morning readiness narrative | DONE (verify green) | `coach.ts` buildReadinessContext + runReadinessSummary read the GENERIC model only (readiness + recovery + resolved signal lines); `generateReadinessNarrativeAction` (auth+coach gated) persists via app_meta; `readiness-coach.tsx` card on /health mirrors the weekly-digest UX; replies in the user language. |
 | Self-QA (screenshots, light + dark) | DONE | Captured `/health` in both themes via a throwaway Playwright spec; fixed the header badge/Sync collision + nav overflow and a clipped trend x-tick; re-verified. e2e `health.spec.ts` drives the real ingest→panel→readiness→recovery→badge path in-browser. |
 
 ---

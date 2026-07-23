@@ -660,6 +660,16 @@ export const pt: Dict = {
       avg7: "Média de 7 dias",
       noData: "Ainda sem dados de tendência para esta métrica.",
     },
+    coach: {
+      title: "Leitura do treinador",
+      subtitle: "Uma leitura matinal de quão pronto você está, a partir dos seus sinais de saúde.",
+      empty: "Gere uma leitura de prontidão matinal a partir dos sinais de hoje.",
+      generate: "Ver leitura de hoje",
+      regenerate: "Atualizar leitura",
+      loading: "Pensando…",
+      generatedAt: "Gerado em {date} às {time}",
+      notConfigured: "Defina ANTHROPIC_API_KEY para ativar a leitura do treinador.",
+    },
   },
   settingsPage: {
     title: "Ajustes",

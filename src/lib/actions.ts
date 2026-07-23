@@ -5,7 +5,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { NONE } from "./constants";
 import { splitErrorText, isLang } from "./i18n";
-import { LANG_COOKIE } from "./lang";
+import { LANG_COOKIE, getLang } from "./lang";
 import { storePhoto, deletePhoto, InvalidImageError } from "./storage";
 import {
   addActivityChatMessage,
@@ -38,18 +38,28 @@ import {
   updateShoe,
   upsertHealthMetrics,
   confirmActivity,
+  getReadinessSnapshot,
+  getRecoveryState,
+  getResolvedMetricsForDate,
+  getLatestHealthDate,
+  setReadinessNarrative,
   type BikeFields,
   type ShoeFields,
 } from "./db";
-import { SUBJECTIVE_SCALE, snapshotToMetrics } from "./health";
+import { METRIC_META, SUBJECTIVE_SCALE, snapshotToMetrics } from "./health";
+import { dictionaries } from "./i18n";
+import { fmtHoursMin } from "./format";
 import {
   buildActivityContext,
   buildDigestContext,
+  buildReadinessContext,
   isCoachConfigured,
   runCoachChat,
+  runReadinessSummary,
   runWeeklyDigest,
   summarizeStreams,
   type CoachLoad,
+  type CoachReadiness,
   type CoachStreamSummary,
 } from "./coach";
 import { computeLoad, THRESHOLD_PACE_RANGE } from "./fitness";
@@ -73,7 +83,7 @@ import {
   pmcPoint,
   refreshAll,
 } from "./action-helpers";
-import type { Feeling, SplitInput } from "./types";
+import type { Feeling, HealthMetric, HealthMetricRow, SplitInput } from "./types";
 
 // ---------------------------------------------------------------------------
 // Language
@@ -792,5 +802,79 @@ export async function saveHealthEntryAction(input: HealthEntryInput): Promise<Ac
     return { ok: true };
   } catch (error) {
     return fail(error, t.errors.generic);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Coach — morning readiness narrative from the generic health model. Reads only
+// the resolved metrics + app-owned readiness/recovery, never source specifics.
+// ---------------------------------------------------------------------------
+
+export type ReadinessNarrativeResult =
+  { ok: true; text: string; generatedAt: string } | { ok: false; error: string };
+
+// The resolved signals surfaced to the coach, formatted as English "label: value".
+const COACH_SIGNAL_METRICS: HealthMetric[] = [
+  "sleep_total",
+  "sleep_quality",
+  "hrv_overnight",
+  "hrv_status",
+  "resting_hr",
+  "stress_avg",
+  "body_battery_high",
+  "spo2",
+];
+
+function formatSignal(row: HealthMetricRow): string | null {
+  const meta = METRIC_META[row.metric];
+  const label = dictionaries.en.health.metrics[row.metric];
+  if (meta.kind === "text") return row.value_text ? `${label}: ${row.value_text}` : null;
+  if (row.value === null) return null;
+  if (meta.unit === "min") return `${label}: ${fmtHoursMin(row.value * 60)}`;
+  const value = Math.round(row.value * 10) / 10;
+  return `${label}: ${value}${meta.unit ? ` ${meta.unit}` : ""}`;
+}
+
+export async function generateReadinessNarrativeAction(): Promise<ReadinessNarrativeResult> {
+  const t = await dict();
+  if (!(await requireAuth())) return { ok: false, error: t.errors.unauthorized };
+  if (!isCoachConfigured()) return { ok: false, error: t.errors.coachNotConfigured };
+  try {
+    const [snapshot, recovery, latestDate] = await Promise.all([
+      getReadinessSnapshot(),
+      getRecoveryState(),
+      getLatestHealthDate(),
+    ]);
+    if (!snapshot) return { ok: false, error: t.health.readiness.emptyBody };
+
+    const rows = latestDate ? await getResolvedMetricsForDate(latestDate) : [];
+    const signals = COACH_SIGNAL_METRICS.map((metric) => {
+      const row = rows.find((r) => r.metric === metric);
+      return row ? formatSignal(row) : null;
+    }).filter((line): line is string => line !== null);
+
+    const readiness: CoachReadiness = {
+      score: snapshot.readiness.score,
+      band: snapshot.readiness.band,
+      components: snapshot.readiness.components.map((c) => ({ key: c.key, sub: c.sub })),
+      topNegative: snapshot.readiness.topNegative,
+      lowConfidence: snapshot.readiness.lowConfidence,
+      redFlag: snapshot.readiness.redFlag
+        ? t.health.readiness.redFlags[snapshot.readiness.redFlag.reason]
+        : null,
+    };
+
+    const context = buildReadinessContext({
+      readiness,
+      recoveryHours: recovery.remainingHours,
+      signals,
+    });
+    const language = (await getLang()) === "pt" ? "Portuguese" : "English";
+    const text = await runReadinessSummary(context, language);
+    const saved = await setReadinessNarrative(text);
+    refreshAll();
+    return { ok: true, text: saved.text, generatedAt: saved.generatedAt };
+  } catch (error) {
+    return fail(error, t.errors.coachFailed);
   }
 }

@@ -238,6 +238,58 @@ export function buildDigestContext(input: {
 }
 
 // ---------------------------------------------------------------------------
+// Morning readiness narrative — reads the GENERIC health model only (readiness
+// score/components, recovery hours, resolved metric highlights). No Garmin/Coros
+// specifics reach here, so the coach is identical across a device switch.
+// ---------------------------------------------------------------------------
+
+export interface CoachReadiness {
+  score: number;
+  band: string;
+  components: { key: string; sub: number }[];
+  topNegative: string | null;
+  lowConfidence: boolean;
+  /** A short reason string when an acute red flag capped the band, else null. */
+  redFlag: string | null;
+}
+
+export function buildReadinessContext(input: {
+  readiness: CoachReadiness;
+  recoveryHours: number;
+  /** Pre-formatted "Label: value unit" lines for today's resolved signals. */
+  signals: string[];
+}): string {
+  const { readiness, recoveryHours, signals } = input;
+  const lines: string[] = [];
+
+  lines.push("READINESS TODAY (app-computed, 0-100)");
+  lines.push(
+    `- Score: ${readiness.score} / 100 (band: ${readiness.band})${readiness.lowConfidence ? " [low confidence — limited data]" : ""}`
+  );
+  if (readiness.redFlag) lines.push(`- Red flag: ${readiness.redFlag}`);
+  if (readiness.components.length > 0) {
+    lines.push(
+      `- Components: ${readiness.components.map((c) => `${c.key} ${Math.round(c.sub)}`).join(", ")}`
+    );
+  }
+  if (readiness.topNegative) lines.push(`- Most limiting factor: ${readiness.topNegative}`);
+
+  lines.push("");
+  lines.push("RECOVERY");
+  lines.push(
+    `- Recovery remaining: ${Math.round(recoveryHours)} h (app-computed, intensity-driven)`
+  );
+
+  if (signals.length > 0) {
+    lines.push("");
+    lines.push("TODAY'S SIGNALS");
+    for (const signal of signals) lines.push(`- ${signal}`);
+  }
+
+  return lines.join("\n");
+}
+
+// ---------------------------------------------------------------------------
 // Claude calls
 // ---------------------------------------------------------------------------
 
@@ -259,6 +311,14 @@ You are given the athlete's confirmed activities from the last 7 days, how their
 Keep it concise. Use metric units and write pace as m:ss/km. Reference the real numbers. If the week was empty or thin, say so plainly.
 
 Write in plain prose with simple hyphen ("- ") bullet lines and plain-text section labels (e.g. a short line ending in a colon). Do NOT use Markdown syntax: no "#" headings, no "*"/"**" bold or italics, no backticks, no tables. The digest is shown as plain text, so any Markdown markers would appear literally.`;
+
+const READINESS_SYSTEM_PROMPT = `You are an experienced endurance coach giving the athlete a short morning "how ready am I to train today" read.
+
+You are given an app-computed readiness score (0-100) with its band and component breakdown, the current recovery-remaining in hours, and today's health signals (sleep, HRV, resting HR, stress, etc.). These are source-agnostic — do not assume any specific device.
+
+Ground every statement in the actual numbers (quote them). In 3-5 sentences or short hyphen bullets: say how ready they are, name the one or two factors driving that most (especially the most-limiting one), and give a concrete recommendation for today's session (intensity and rough duration/type). If a red flag is present, lead with it. If confidence is low, say so briefly.
+
+Be concise and specific. Use metric units. No filler. Write in plain prose and simple hyphen ("- ") bullet lines only — no Markdown (#, *, **, backticks, tables), which would appear literally.`;
 
 /** Concatenates the text blocks of a Claude response into a plain string. */
 function extractText(res: Anthropic.Message): string {
@@ -286,6 +346,18 @@ export async function runCoachChat(
     output_config: { effort: "medium" },
     system: SYSTEM_PROMPT,
     messages,
+  });
+  return extractText(res);
+}
+
+export async function runReadinessSummary(context: string, language: string): Promise<string> {
+  const res = await getClient().messages.create({
+    model: COACH_MODEL,
+    max_tokens: 800,
+    thinking: { type: "adaptive" },
+    output_config: { effort: "medium" },
+    system: `${READINESS_SYSTEM_PROMPT}\n\nWrite your reply in ${language}.`,
+    messages: [{ role: "user", content: context }],
   });
   return extractText(res);
 }

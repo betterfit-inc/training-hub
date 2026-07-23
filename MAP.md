@@ -8,7 +8,7 @@ Keep this map current: update it in the same change that moves or rewires a modu
 
 - `src/app/layout.tsx` — root RSC shell: fonts, `force-dynamic`, theme + i18n providers, header, toaster, Speed Insights.
 - Pages (async RSC, no page-level `"use client"`): `/` (log) · `/review` · `/activity/[id]` · `/fitness` · `/insights` · `/races` · `/races/compare` · `/shoes` · `/bikes` · `/settings`.
-- API routes (GET handlers): `/api/strava/connect`, `/api/strava/callback` (OAuth), `/api/uploads/[name]` (photo serving).
+- API routes: GET `/api/strava/connect`, `/api/strava/callback` (OAuth), `/api/uploads/[name]` (photo serving); POST `/api/health/ingest` (machine-token health snapshot ingest, allowlisted in the proxy).
 - CLI scripts: `scripts/seed.ts` (fake fixtures), `scripts/backfill-load.ts` (recompute all loads). Both refuse a remote DB unless `ALLOW_REMOTE_DB=1` (protects the shared/prod DB).
 
 ## Core modules (`src/lib`) — one job each
@@ -23,6 +23,9 @@ Keep this map current: update it in the same change that moves or rewires a modu
 | `streams.ts` | Pure normalizer: downsample Strava streams to a ≤400-pt charting shape. |
 | `storage.ts` | Photo storage abstraction (Vercel Blob in prod, local disk in dev). |
 | `fitness.ts` | Pure engine: per-activity TSS (power→pace→HR→RPE), PMC (CTL/ATL/TSB EWMA), form state, Friel zones. No IO. |
+| `health.ts` | Pure health domain: metric/source metadata, the source resolver (device > manual), and the ingest snapshot normalizer. No IO. Source-agnostic — adapters normalize into its generic shape. |
+| `readiness.ts` | Pure engine: app-owned 0–100 readiness (HRV/sleep/load/RHR/energy/subjective, weight renormalization, bands, red-flag override). No IO. |
+| `recovery.ts` | Pure engine: one global, compounding, intensity-driven recovery-debt in hours (drain + per-session cost, easy≈0). No IO. |
 | `races.ts` · `cycling.ts` · `insights.ts` · `blocks.ts` | Race-distance buckets · ride-metric extraction · rolling-window aggregation · race-block builder/analysis. Pure. |
 | `coach.ts` | Server-side AI layer (Claude via `@anthropic-ai/sdk`); per-activity chat + weekly digest. Graceful degradation with no API key. |
 | `baseline.ts` | The sole owner's baseline gear + threshold fixtures (seeded by the migration). Kept out of `db.ts` (G5.7); the one place to change/remove at productization. |

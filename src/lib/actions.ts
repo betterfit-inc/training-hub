@@ -5,7 +5,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { NONE } from "./constants";
 import { splitErrorText, isLang } from "./i18n";
-import { LANG_COOKIE } from "./lang";
+import { LANG_COOKIE, getLang } from "./lang";
 import { storePhoto, deletePhoto, InvalidImageError } from "./storage";
 import {
   addActivityChatMessage,
@@ -36,18 +36,30 @@ import {
   updateActivityJournal,
   updateBike,
   updateShoe,
+  replaceHealthMetricsForDaySource,
   confirmActivity,
+  getReadinessSnapshot,
+  getRecoveryState,
+  getResolvedMetricsForDate,
+  getLatestHealthDate,
+  setReadinessNarrative,
   type BikeFields,
   type ShoeFields,
 } from "./db";
+import { METRIC_META, SUBJECTIVE_SCALE, snapshotToMetrics } from "./health";
+import { dictionaries } from "./i18n";
+import { fmtHoursMin, localDateInputValue } from "./format";
 import {
   buildActivityContext,
   buildDigestContext,
+  buildReadinessContext,
   isCoachConfigured,
   runCoachChat,
+  runReadinessSummary,
   runWeeklyDigest,
   summarizeStreams,
   type CoachLoad,
+  type CoachReadiness,
   type CoachStreamSummary,
 } from "./coach";
 import { computeLoad, THRESHOLD_PACE_RANGE } from "./fitness";
@@ -71,7 +83,7 @@ import {
   pmcPoint,
   refreshAll,
 } from "./action-helpers";
-import type { Feeling, SplitInput } from "./types";
+import type { Feeling, HealthMetric, HealthMetricRow, SplitInput } from "./types";
 
 // ---------------------------------------------------------------------------
 // Language
@@ -724,6 +736,150 @@ export async function generateWeeklyDigestAction(): Promise<WeeklyDigestResult> 
     });
     const text = await runWeeklyDigest(context);
     const saved = await setWeeklyDigest(text);
+    refreshAll();
+    return { ok: true, text: saved.text, generatedAt: saved.generatedAt };
+  } catch (error) {
+    return fail(error, t.errors.coachFailed);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Health — manual morning check-in (the in-app HealthSource adapter). Writes
+// `source: 'manual'` rows; device syncs write their own source and win by
+// default in the resolver, so a later device value never clobbers these.
+// ---------------------------------------------------------------------------
+
+export interface HealthEntryInput {
+  date: string;
+  fatigue: number | null;
+  soreness: number | null;
+  stress: number | null;
+  mood: number | null;
+  weight: number | null;
+  sickness: boolean;
+  injury: boolean;
+}
+
+export async function saveHealthEntryAction(input: HealthEntryInput): Promise<ActionResult> {
+  const t = await dict();
+  if (!(await requireAuth())) return { ok: false, error: t.errors.unauthorized };
+  try {
+    // Range-check the ratings the trust boundary owns (the pure normalizer only
+    // NaN-guards). Blank fields arrive as null and are simply not recorded.
+    const ratings = [input.fatigue, input.soreness, input.stress, input.mood];
+    for (const rating of ratings) {
+      if (rating !== null && !inRange(rating, SUBJECTIVE_SCALE.min, SUBJECTIVE_SCALE.max)) {
+        return { ok: false, error: t.errors.invalidHealthEntry };
+      }
+    }
+    if (input.weight !== null && !inRange(input.weight, 20, 400)) {
+      return { ok: false, error: t.errors.invalidHealthEntry };
+    }
+    // Reject a future check-in (and, via the normalizer below, an impossible
+    // calendar date) so a malformed entry can't become the latest readiness day.
+    if (input.date > localDateInputValue(new Date())) {
+      return { ok: false, error: t.errors.invalidDate };
+    }
+
+    // Reuse the ingest normalizer so manual and device paths share one shape +
+    // validation. sickness/injury are recorded every save (0 or 1) so a cleared
+    // flag is captured, not just a set one.
+    const normalized = snapshotToMetrics(
+      {
+        date: input.date,
+        source: "manual",
+        weight: input.weight,
+        subjective: {
+          fatigue: input.fatigue,
+          soreness: input.soreness,
+          stress: input.stress,
+          mood: input.mood,
+          sickness: input.sickness ? 1 : 0,
+          injury: input.injury ? 1 : 0,
+        },
+      },
+      new Date().toISOString()
+    );
+    if ("error" in normalized) return { ok: false, error: t.errors.invalidDate };
+
+    // Replace this day's MANUAL rows (not a per-field upsert) so a field the
+    // athlete cleared in the form is actually removed, not left stale. Device
+    // rows for the day are a different source and stay untouched.
+    await replaceHealthMetricsForDaySource(input.date, "manual", normalized.rows);
+    refreshAll();
+    return { ok: true };
+  } catch (error) {
+    return fail(error, t.errors.generic);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Coach — morning readiness narrative from the generic health model. Reads only
+// the resolved metrics + app-owned readiness/recovery, never source specifics.
+// ---------------------------------------------------------------------------
+
+export type ReadinessNarrativeResult =
+  { ok: true; text: string; generatedAt: string } | { ok: false; error: string };
+
+// The resolved signals surfaced to the coach, formatted as English "label: value".
+const COACH_SIGNAL_METRICS: HealthMetric[] = [
+  "sleep_total",
+  "sleep_quality",
+  "hrv_overnight",
+  "hrv_status",
+  "resting_hr",
+  "stress_avg",
+  "body_battery_high",
+  "spo2",
+];
+
+function formatSignal(row: HealthMetricRow): string | null {
+  const meta = METRIC_META[row.metric];
+  const label = dictionaries.en.health.metrics[row.metric];
+  if (meta.kind === "text") return row.value_text ? `${label}: ${row.value_text}` : null;
+  if (row.value === null) return null;
+  if (meta.unit === "min") return `${label}: ${fmtHoursMin(row.value * 60)}`;
+  const value = Math.round(row.value * 10) / 10;
+  return `${label}: ${value}${meta.unit ? ` ${meta.unit}` : ""}`;
+}
+
+export async function generateReadinessNarrativeAction(): Promise<ReadinessNarrativeResult> {
+  const t = await dict();
+  if (!(await requireAuth())) return { ok: false, error: t.errors.unauthorized };
+  if (!isCoachConfigured()) return { ok: false, error: t.errors.coachNotConfigured };
+  try {
+    const [snapshot, recovery, latestDate] = await Promise.all([
+      getReadinessSnapshot(),
+      getRecoveryState(),
+      getLatestHealthDate(),
+    ]);
+    if (!snapshot) return { ok: false, error: t.health.readiness.emptyBody };
+
+    const rows = latestDate ? await getResolvedMetricsForDate(latestDate) : [];
+    const signals = COACH_SIGNAL_METRICS.map((metric) => {
+      const row = rows.find((r) => r.metric === metric);
+      return row ? formatSignal(row) : null;
+    }).filter((line): line is string => line !== null);
+
+    const readiness: CoachReadiness = {
+      score: snapshot.readiness.score,
+      band: snapshot.readiness.band,
+      components: snapshot.readiness.components.map((c) => ({ key: c.key, sub: c.sub })),
+      topNegative: snapshot.readiness.topNegative,
+      lowConfidence: snapshot.readiness.lowConfidence,
+      redFlag: snapshot.readiness.redFlag
+        ? t.health.readiness.redFlags[snapshot.readiness.redFlag.reason]
+        : null,
+    };
+
+    const context = buildReadinessContext({
+      readiness,
+      recoveryHours: recovery.remainingHours,
+      signals,
+    });
+    const language = (await getLang()) === "pt" ? "Portuguese" : "English";
+    const text = await runReadinessSummary(context, language);
+    const saved = await setReadinessNarrative(text);
     refreshAll();
     return { ok: true, text: saved.text, generatedAt: saved.generatedAt };
   } catch (error) {

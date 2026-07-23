@@ -9,3 +9,5 @@ export * from "./strava-auth";
 export * from "./load";
 export * from "./coach";
 export * from "./benchmarks";
+export * from "./health";
+export * from "./readiness";

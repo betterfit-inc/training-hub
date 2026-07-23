@@ -22,7 +22,10 @@ import { authConfigured, SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
 // own signed `state`, so it must not be redirected. Everything else — including
 // /api/strava/connect (which initiates the owner's OAuth) and /api/uploads
 // (private photos) — requires the owner session.
-const PUBLIC_PATHS = ["/login", "/api/strava/callback"];
+// `/api/health/ingest` authenticates with its own machine token
+// (HEALTH_INGEST_SECRET), not the owner session, so the page gate must let it
+// through — the route handler itself rejects an unauthenticated caller.
+const PUBLIC_PATHS = ["/login", "/api/strava/callback", "/api/health/ingest"];
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((base) => pathname === base || pathname.startsWith(`${base}/`));

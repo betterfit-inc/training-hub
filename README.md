@@ -80,7 +80,7 @@ Vercel's filesystem is ephemeral, so the deployed app stores data in Turso (a ho
    turso db tokens create training-hub     # -> TURSO_AUTH_TOKEN
    ```
 
-2. In the Vercel project, add the environment variables: `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET`, `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`.
+2. In the Vercel project, add the environment variables: `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET`, `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`. To enforce the owner login also set `AUTH_PASSWORD` and `AUTH_SECRET`; to accept the daily health sync set `HEALTH_INGEST_SECRET` (the same value the sync service uses, see `services/garmin-sync/README.md`) — without it `POST /api/health/ingest` stays closed (503).
 
 3. In the Vercel project's Storage tab, create a Blob store and connect it. That injects `BLOB_READ_WRITE_TOKEN` automatically. Shoe photos uploaded locally are files on your machine, so re-upload them once through each shoe's Edit dialog on the deployed app.
 

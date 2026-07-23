@@ -1,3 +1,48 @@
+# Build log — Health, Readiness & Recovery layer
+
+Branch: `feature/health-readiness` off `main`. Autonomous, unattended run per `docs/health-readiness/PLAN.md`. **Nothing is merged** until the single PR to `main` (the Cubic review gate). `npm run verify` is kept green after every step; commits are small and self-validated.
+
+The prior-phase log (Phase 3) is preserved below this section.
+
+## Decisions taken (autonomous — no owner questions)
+
+- **`health_metrics` schema.** One row per `(date, metric, source)`, `UNIQUE(date, metric, source)`. Stores exactly one of `value REAL` (numeric metrics + 0/1 flags) or `value_text TEXT` (categorical labels like `hrv_status`, device training status). Rationale: the plan says `value REAL (or a small typed value)`; a second `value_text` column keeps a categorical reading in the SAME cohesive row rather than splitting metrics into two tables or encoding labels as magic numbers. Migration `7` (idempotent, ordered registry). Indexed by `(date)` and `(metric, date)`.
+- **Metric union (types.ts).** The plan's list, plus device-native reference metrics `device_readiness`, `device_recovery_hours`, `device_training_status` (shown alongside ours, never canonical), and `hrv_status`. Subjective set: `fatigue|soreness|stress_subjective|mood` (1–5 Hooper scale) + `sickness|injury` (0/1 flags).
+- **Source resolver** lives once in the pure `src/lib/health.ts`: `SOURCE_PRIORITY` device(3) > manual(2) > computed(1), ties broken by most-recent `recorded_at`. Made a single knob so a user-overridable precedence is a one-line change later.
+- **Ingest auth** = shared machine token in `Authorization: Bearer`, checked constant-time against `HEALTH_INGEST_SECRET` (reuses `crypto.ts`). Unconfigured secret = endpoint CLOSED (503), never open. Path allowlisted in `src/proxy.ts` so the owner-session page gate does not block the machine caller (the route is its own guard).
+- **Idempotent ingest** = delete-then-insert of a `(date, source)`'s rows in one atomic write batch, so a re-sync overwrites in place and a metric that drops out of a later snapshot leaves no stale row. A manual row for the same metric/day is untouched (different source).
+
+## Incident (self-reported, resolved)
+
+While validating the Python sync's mock mode against a locally-started dev server, I set `DATABASE_URL` to a scratch sqlite file — but `.env.local` sets `TURSO_DATABASE_URL` (the shared prod DB), and the client prefers `TURSO_*` over `DATABASE_URL`. So the mock POST wrote 18 `garmin` rows (date 2026-07-23) into the prod `health_metrics` table. I stopped the server and deleted exactly those rows; prod `health_metrics` is back to 0 rows. The additive migration 7 (table creation) remains in prod, which is harmless — it is the same idempotent migration that runs on deploy. Takeaway: to exercise the app locally against a local DB you must UNSET `TURSO_*`, not just set `DATABASE_URL` (the e2e harness does exactly this). The ingest pipeline itself validated correctly (18 metrics normalized + upserted).
+
+## Open questions (for the PR / owner)
+
+- Garmin first-login MFA is a one-time interactive step that cannot run headless — the sync service + Action are built and documented; the token bootstrap is the single manual step (see `services/garmin-sync/README.md`).
+- Readiness/recovery constants are defensible defaults from the research doc, NOT tuned to this athlete's data yet — flagged in code as needing real-data tuning.
+
+## Steps
+
+| Step | Status | Notes |
+|---|---|---|
+| Domain model + migration 7 + `db/health.ts` + resolver | DONE (verify green) | `types.ts` unions; pure `health.ts` (metadata + resolver + snapshot normalizer, 15 unit tests); `db/health.ts` query helpers through the plain-object seam; migration 7. |
+| Ingest endpoint `POST /api/health/ingest` + machine token | DONE (verify green) | Route handler (thin: parse → authorize → normalize → idempotent upsert); proxy allowlist; `.env.example` doc; 7 route tests (auth 401/503, bad JSON/date/source 400, persist, idempotency, manual-preserved). |
+| Readiness engine `src/lib/readiness.ts` (pure) | DONE (verify green) | `computeReadiness` per RESEARCH §4.2: HRV(ln rMSSD z)/sleep/load(TSB+ACWR)/RHR/energy/subjective sub-scores, default weights renormalized over present components (graceful degradation), bands (≥70 ready / 45–69 caution / <45 rest), red-flag override (acute HRV+RHR crash or sickness/injury caps at caution), low-confidence flag, top-negative component. Named constants; 12 known-value unit tests. |
+| Recovery engine `src/lib/recovery.ts` (pure) | DONE (verify green) | ONE global compounding intensity-driven debt (hours). Fold over recent activities: continuous drain (1 debt-h per rest-h) + per-session `recoveryCost`. Below IF floor 0.75 → ~0 (active recovery drains slightly, never jumps); above floor → BASE·IF²·hours^0.75·gate, amplified by negative TSB + existing debt (compounding), cheaper with higher CTL. Optional HRV drain modulation (tier 2). 10 unit tests incl. the required scenarios (stacked > single, easy adds ~0, decays to 0, intensity dominates volume). |
+| DB assembler `src/lib/db/readiness.ts` | DONE (verify green) | Bridges resolved health series + PMC/load into engine inputs; personal rolling baselines (HRV ln 7d/60d, RHR 30d), ACWR from daily load, HRV→drain-status. `getReadinessSnapshot()` + `getRecoveryState()`. Reads only the generic resolved metrics (no source specifics). |
+| i18n `health.*` (en + pt) + `nav.health` | DONE (verify green) | Full parity (typecheck-enforced); metric/group/source/band/component records use `satisfies Record<Union,string>`. |
+| Manual check-in adapter (`saveHealthEntryAction` + form) | DONE (verify green) | requireAuth-gated action reuses the ingest normalizer to write `source:'manual'` rows (device wins in the resolver); `health-entry-form.tsx` 1–5 ratings + weight + sickness/injury. **Decision:** blank ratings are simply not recorded (no clear-to-null in v1). |
+| Metrics panel + trend charts + source labels | DONE (verify green) | `health-metrics-panel.tsx` (per-day resolved tiles grouped, source label each); `health-chart.tsx` 30-day SVG trend (normal-range band + 7-day avg, house style). |
+| Readiness snapshot + global recovery badge + info popup | DONE (verify green) | `readiness-snapshot.tsx` (score meter, band, component bars, red-flag, low-confidence); `recovery-badge.tsx` in the header decrements live from `asOf` and opens a transparent breakdown dialog (device value shown as secondary). |
+| `/health` page + nav + layout wiring | DONE (verify green) | RSC assembles readiness/recovery/trends/panel/check-in; empty states when no data. Header widened to `max-w-7xl` to fit the 10th nav item + the badge (was overflowing at `max-w-5xl`). |
+| Seed computes `activity_load` | DONE (verify green) | `scripts/seed.ts` now runs `recomputeAllLoads()` via the real write path so fitness/readiness/recovery have data in dev + e2e. |
+| Coach: morning readiness narrative | DONE (verify green) | `coach.ts` buildReadinessContext + runReadinessSummary read the GENERIC model only (readiness + recovery + resolved signal lines); `generateReadinessNarrativeAction` (auth+coach gated) persists via app_meta; `readiness-coach.tsx` card on /health mirrors the weekly-digest UX; replies in the user language. |
+| Garmin sync service + Actions cron | DONE (verify green) | `services/garmin-sync/` (`sync.py`, `requirements.txt`, `README.md`, `mock-snapshot.json`) — standalone python-garminconnect job, trailing-window fetch, per-metric graceful degradation, loud on login/ingest failure, `SYNC_MOCK=1` path. `.github/workflows/garmin-sync.yml` daily cron (12:00 UTC) + dispatch, token restored from a base64 secret. App builds/tests fully ignore the folder (Python; not in tsconfig/knip/madge; prettier skips .py, checks the yml). Validated the mock POST against a running app (18 metrics ingested). One-time Garmin MFA login is the documented manual step. |
+| Self-QA (screenshots, light + dark) | DONE | Captured `/health` in both themes via a throwaway Playwright spec; fixed the header badge/Sync collision + nav overflow and a clipped trend x-tick; re-verified. e2e `health.spec.ts` drives the real ingest→panel→readiness→recovery→badge path in-browser. |
+| PR + Cubic review round | DONE (verify green) | PR #3 to `main`. Cubic raised 18 findings (1 P1, 16 P2, 1 P3); all addressed in one commit and replied on each thread. Notable: P1 recovery-data leak on `/login` (now computed only for authenticated visitors); ingest switched to per-metric upsert so a transient sync miss never erases a good reading; manual check-in rejects future/impossible dates, clears fields on date change, and replaces the day's manual rows so a cleared field clears; subjective is manual-only; recovery ignores future-dated activities and now costs RPE-only sessions via a TSS-implied intensity; same-day HRV required; `requests` bumped for CVE-2024-47081; `SYNC_DAYS` validated; Garmin responses coerced defensively. Regression tests added for each; CI `verify` green on the fix commit; re-review raised no new findings. **Not merged** — the PR is the owner's gate. |
+
+---
+
 # Overnight build log — Phase 3 (M0–M3 + auth)
 
 Branch: `build/overnight` off `main`. Autonomous, unattended run. **Nothing is merged** — this PR is the review gate.

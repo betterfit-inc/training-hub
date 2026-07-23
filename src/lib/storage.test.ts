@@ -50,6 +50,41 @@ describe("sniffImageType", () => {
     expect(sniffImageType(avif)).toBe("image/avif");
   });
 
+  // ftyp helpers: brand -> its 4 bytes, and a big-endian u32 box size.
+  const brand = (s: string) => [...s].map((c) => c.charCodeAt(0));
+  const u32be = (n: number) => [(n >>> 24) & 0xff, (n >>> 16) & 0xff, (n >>> 8) & 0xff, n & 0xff];
+
+  it("detects an AVIF whose avif brand sits in the compatible list beyond byte 32", () => {
+    // ftyp box: size + "ftyp" + major "mif1" + minor version + compatible list.
+    // "avif" is the 5th compatible brand and starts at byte 32 — past the old
+    // fixed 32-byte sniff window.
+    const avifLate = Uint8Array.from([
+      ...u32be(36), // box size
+      ...brand("ftyp"),
+      ...brand("mif1"), // major brand (not AVIF)
+      ...u32be(0), // minor version
+      ...brand("mif1"),
+      ...brand("miaf"),
+      ...brand("MA1B"),
+      ...brand("heic"),
+      ...brand("avif"), // byte 32, beyond the old window
+    ]);
+    expect(sniffImageType(avifLate)).toBe("image/avif");
+  });
+
+  it("rejects an ftyp box that declares no AVIF brand", () => {
+    // A HEIF ftyp (major "heic", no avif/avis anywhere) is not in the allowlist.
+    const heic = Uint8Array.from([
+      ...u32be(24), // box size
+      ...brand("ftyp"),
+      ...brand("heic"), // major brand
+      ...u32be(0), // minor version
+      ...brand("heic"),
+      ...brand("mif1"),
+    ]);
+    expect(sniffImageType(heic)).toBeNull();
+  });
+
   it("returns null for a plain text (non-image) buffer", () => {
     const text = new TextEncoder().encode("Just some text, definitely not an image.");
     expect(sniffImageType(text)).toBeNull();

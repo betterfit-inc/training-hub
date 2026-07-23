@@ -60,18 +60,28 @@ export function signSession(): string {
 }
 
 /**
- * Verify a session token's signature (constant-time) against AUTH_SECRET.
- * Returns false for a missing/empty secret, a malformed token, or any
- * tampered/foreign-signed value. Exported for the round-trip test.
+ * Verify a session token against AUTH_SECRET. Returns false for a missing/empty
+ * secret, a malformed token, a tampered/foreign-signed value, OR a token whose
+ * issued-at is older than SESSION_MAX_AGE_S — the cookie's `maxAge` is only a
+ * client hint, so expiry must be enforced server-side here (this is the single
+ * chokepoint isAuthenticated/requireAuth and the proxy all go through).
+ * Exported for the round-trip test.
  */
 export function verifySessionToken(token: string | undefined): boolean {
   const secret = process.env.AUTH_SECRET ?? "";
   if (!secret || !token) return false;
-  const lastDot = token.lastIndexOf(".");
-  if (lastDot <= 0) return false;
-  const payload = token.slice(0, lastDot);
-  const signature = token.slice(lastDot + 1);
-  return constantTimeEqual(signature, hmac(payload, secret));
+  // Structure: exactly `owner.<issuedAtMs>.<hmac>` — the hmac is hex and the
+  // issued-at is a number, so neither introduces a dot. Anything else is bogus.
+  const parts = token.split(".");
+  if (parts.length !== 3) return false;
+  const [prefix, issuedAtRaw, signature] = parts;
+  const payload = `${prefix}.${issuedAtRaw}`;
+  if (!constantTimeEqual(signature, hmac(payload, secret))) return false;
+  // Signature is authentic; now enforce expiry. issuedAt is in ms (Date.now),
+  // SESSION_MAX_AGE_S is in seconds. Reject a non-numeric issued-at defensively.
+  const issuedAt = Number(issuedAtRaw);
+  if (!Number.isFinite(issuedAt)) return false;
+  return Date.now() - issuedAt <= SESSION_MAX_AGE_S * 1000;
 }
 
 /** Set the signed session cookie (login). httpOnly, lax, secure in production. */

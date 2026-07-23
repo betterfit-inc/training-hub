@@ -1,6 +1,23 @@
 import { client } from "./client";
-import type { InStatement } from "./client";
+import type { InStatement, Row } from "./client";
 import { ensureMigrated } from "./migrations";
+
+/**
+ * Rebuild a libSQL {@link Row} as a genuine plain object keyed by the result's
+ * column names. libSQL rows are array-like: they carry numeric index keys and a
+ * non-`Object.prototype` prototype, so handing one straight to a `"use client"`
+ * component trips React's "Only plain objects can be passed to Client Components"
+ * warning. This is the single read seam where that shape is flattened.
+ *
+ * Built from `columns` (NOT a `{...row}` spread, which would also copy the numeric
+ * index keys). Values are copied by reference — identical numbers/strings/nulls —
+ * so every typed accessor and decoder downstream reads exactly the same data.
+ */
+function toPlain<T>(row: Row, columns: string[]): T {
+  const plain: Record<string, unknown> = {};
+  for (const col of columns) plain[col] = row[col];
+  return plain as T;
+}
 
 /**
  * Clears a Strava gear_id off every OTHER row of `table` so the unique gear
@@ -34,12 +51,13 @@ export async function exec(sql: string, args: Args = []) {
 }
 
 export async function many<T>(sql: string, args: Args = []): Promise<T[]> {
-  return (await exec(sql, args)).rows as unknown as T[];
+  const result = await exec(sql, args);
+  return result.rows.map((row) => toPlain<T>(row, result.columns));
 }
 
 export async function one<T>(sql: string, args: Args = []): Promise<T | null> {
   const result = await exec(sql, args);
-  return result.rows.length > 0 ? (result.rows[0] as unknown as T) : null;
+  return result.rows.length > 0 ? toPlain<T>(result.rows[0], result.columns) : null;
 }
 
 export async function batchWrite(statements: InStatement[]) {

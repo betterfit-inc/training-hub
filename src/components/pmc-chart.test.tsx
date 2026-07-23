@@ -47,4 +47,17 @@ describe("PmcChart keyboard navigation (G8.4)", () => {
     fireEvent.keyDown(svg, { key: "Home" });
     expect(screen.getByText("11")).toBeTruthy();
   });
+
+  it("ArrowLeft from no selection activates the LAST point", () => {
+    render(<PmcChart points={points} weekly={[]} />);
+    const svg = screen.getByRole("img", { name: /fitness/i });
+
+    // No active point yet.
+    expect(screen.queryByText("33")).toBeNull();
+
+    // From no selection ArrowLeft wraps to the end (index n-1), not the first.
+    fireEvent.keyDown(svg, { key: "ArrowLeft" });
+    expect(screen.getByText("33")).toBeTruthy();
+    expect(screen.queryByText("11")).toBeNull();
+  });
 });

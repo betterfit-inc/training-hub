@@ -50,7 +50,10 @@ export function raceCategory(
   if (name.includes("trail") || sport.toLowerCase().includes("trail")) return "trail";
 
   const km = activity.distance_km ?? 0;
-  if (km <= 0) return "other";
+  // A non-finite (NaN/Infinity) or non-positive distance has no running band —
+  // NaN in particular fails every `>=` below and would otherwise fall through
+  // to the 5k default.
+  if (!Number.isFinite(km) || km <= 0) return "other";
   if (km >= ULTRA_MIN_KM) return "ultra";
   if (km >= MARATHON_MIN_KM) return "marathon";
   if (km >= K30_MIN_KM) return "30k";

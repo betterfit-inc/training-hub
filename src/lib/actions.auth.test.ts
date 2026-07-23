@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // T1.6 — the auth boundary. Node-env unit tests. Two layers are proven here:
@@ -98,6 +99,42 @@ describe("session sign/verify round-trip", () => {
     const token = signSession();
     vi.stubEnv("AUTH_SECRET", "");
     expect(verifySessionToken(token)).toBe(false);
+  });
+});
+
+describe("session token expiry", () => {
+  // The token format is `owner.<issuedAtMs>.<hmac>`. This signs an arbitrary
+  // payload with the real algorithm so a token can carry a chosen issued-at
+  // (or a malformed one) yet still present a VALID signature — isolating the
+  // expiry/structure check from the signature check.
+  const SECRET = "signing-secret";
+  const signToken = (payload: string) =>
+    `${payload}.${createHmac("sha256", SECRET).update(payload).digest("hex")}`;
+  const THIRTY_ONE_DAYS_MS = 31 * 24 * 60 * 60 * 1000;
+
+  it("verifies a token with a fresh issued-at", () => {
+    vi.stubEnv("AUTH_SECRET", SECRET);
+    expect(verifySessionToken(signSession())).toBe(true);
+    // A token issued well within the 30-day window still verifies.
+    const recent = signToken(`owner.${Date.now() - 24 * 60 * 60 * 1000}`);
+    expect(verifySessionToken(recent)).toBe(true);
+  });
+
+  it("rejects a validly-signed token issued past the max age", () => {
+    vi.stubEnv("AUTH_SECRET", SECRET);
+    const expired = signToken(`owner.${Date.now() - THIRTY_ONE_DAYS_MS}`);
+    expect(verifySessionToken(expired)).toBe(false);
+  });
+
+  it("rejects a validly-signed token with a non-numeric issued-at", () => {
+    vi.stubEnv("AUTH_SECRET", SECRET);
+    expect(verifySessionToken(signToken("owner.not-a-number"))).toBe(false);
+  });
+
+  it("rejects a validly-signed token with the wrong number of parts", () => {
+    vi.stubEnv("AUTH_SECRET", SECRET);
+    // Missing the issued-at segment entirely.
+    expect(verifySessionToken(signToken("owner"))).toBe(false);
   });
 });
 

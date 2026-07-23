@@ -62,16 +62,11 @@ import {
   type SyncResult,
 } from "./strava";
 import { validateSplits } from "./validate";
+import { fail, type ActionResult } from "./action-result";
 import type { Feeling, SplitInput } from "./types";
-
-type ActionResult = { ok: true } | { ok: false; error: string };
 
 async function dict(): Promise<Dict> {
   return dictionaries[await getLang()];
-}
-
-function fail(error: unknown, fallback: string): { ok: false; error: string } {
-  return { ok: false, error: error instanceof Error ? error.message : fallback };
 }
 
 function refreshAll() {

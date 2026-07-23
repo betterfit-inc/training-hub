@@ -25,6 +25,38 @@ const TOKEN_URL = "https://www.strava.com/oauth/token";
 const AUTHORIZE_URL = "https://www.strava.com/oauth/authorize";
 const API_BASE = "https://www.strava.com/api/v3";
 
+// Every outbound Strava request is bounded by this timeout so a hung socket can
+// never stall a sync (or a token refresh) indefinitely.
+const REQUEST_TIMEOUT_MS = 15_000;
+
+// 429 backoff (G7.2): a single rate-limit response used to abort the whole sync.
+// Instead, honor Retry-After and retry a small, bounded number of times.
+const RATE_LIMIT_MAX_RETRIES = 2; // initial attempt + 2 retries = 3 tries max
+const RATE_LIMIT_DEFAULT_BACKOFF_S = 5; // used when Retry-After is absent/unparseable
+const RATE_LIMIT_MAX_BACKOFF_S = 30; // cap so we never sleep unreasonably long
+
+/**
+ * Backoff sleep seam. Kept behind an object so tests can replace it with an
+ * instant stub (`vi.spyOn(backoff, "sleep")`) and exercise the retry path with
+ * zero wall-clock delay. Production always uses the real setTimeout wait.
+ */
+export const backoff = {
+  sleep: (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms)),
+};
+
+/**
+ * Retry-After is delta-seconds. Fall back to a sensible default when it is
+ * missing or unparseable, and cap it so a hostile/huge value can't wedge us.
+ */
+function parseRetryAfterMs(header: string | null): number {
+  const seconds = header !== null ? Number(header) : NaN;
+  const capped = Math.min(
+    Number.isFinite(seconds) && seconds > 0 ? seconds : RATE_LIMIT_DEFAULT_BACKOFF_S,
+    RATE_LIMIT_MAX_BACKOFF_S
+  );
+  return capped * 1000;
+}
+
 export function stravaConfigured(): boolean {
   return !!(process.env.STRAVA_CLIENT_ID && process.env.STRAVA_CLIENT_SECRET);
 }
@@ -71,6 +103,9 @@ async function requestToken(params: Record<string, string>): Promise<TokenRespon
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body,
     cache: "no-store",
+    // Mirror apiGet: bound the token refresh so a hung request surfaces as an
+    // error/log instead of hanging the caller indefinitely.
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
@@ -110,24 +145,38 @@ async function getAccessToken(): Promise<string> {
   return token.access_token;
 }
 
-async function apiGet<T>(pathname: string, params?: Record<string, string>): Promise<T> {
+export async function apiGet<T>(pathname: string, params?: Record<string, string>): Promise<T> {
   const token = await getAccessToken();
   const url = new URL(`${API_BASE}${pathname}`);
   for (const [key, value] of Object.entries(params ?? {})) {
     url.searchParams.set(key, value);
   }
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
-    cache: "no-store",
-    signal: AbortSignal.timeout(15000),
-  });
-  if (!res.ok) {
+
+  // Bounded retry on 429: honor Retry-After, sleep (capped), and try again a
+  // small number of times so one rate-limit response no longer aborts a whole
+  // (up to ~50-page) sync. Never loops unbounded.
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    if (res.ok) return (await res.json()) as T;
     if (res.status === 401) throw new Error("Strava rejected the token. Reconnect from Settings.");
+    if (res.status === 429 && attempt < RATE_LIMIT_MAX_RETRIES) {
+      const waitMs = parseRetryAfterMs(res.headers.get("Retry-After"));
+      logger.warn("strava.apiGet.rateLimited", {
+        pathname,
+        attempt: attempt + 1,
+        waitMs,
+      });
+      await backoff.sleep(waitMs);
+      continue;
+    }
     if (res.status === 429)
       throw new Error("Strava rate limit reached. Try again in a few minutes.");
     throw new Error(`Strava API error (${res.status}).`);
   }
-  return (await res.json()) as T;
 }
 
 // ---------------------------------------------------------------------------
@@ -266,14 +315,20 @@ export async function ensureActivityDetail(
 /**
  * Returns the cached, normalized streams for an activity, fetching and caching
  * them on first view. Mirrors ensureActivityDetail: one API call per activity
- * ever. Returns null for manual activities, when disconnected, when the fetch
- * fails, or when Strava returns no usable stream (empties are never cached).
+ * ever. Returns null for manual activities, when disconnected, or when the fetch
+ * fails.
+ *
+ * When a successful fetch yields no usable stream, a negative marker (the JSON
+ * literal `null`) is cached so the activity is not re-fetched on every view
+ * (G7.4). That marker parses straight back to `null`, so the return contract is
+ * unchanged: callers that got `null` before still get `null`. A fetch *failure*
+ * is never cached — only a confirmed "checked, none" result is.
  */
 export async function ensureActivityStreams(
   activity: Pick<Activity, "id" | "strava_id">
 ): Promise<ActivityStreams | null> {
   const cached = await getActivityStreamsJson(activity.id);
-  if (cached) return JSON.parse(cached) as ActivityStreams;
+  if (cached) return JSON.parse(cached) as ActivityStreams | null;
   if (!activity.strava_id) return null;
   if (!stravaConfigured() || !(await isStravaConnected())) return null;
   try {
@@ -285,7 +340,9 @@ export async function ensureActivityStreams(
       }
     );
     const streams = normalizeStreams(raw);
-    if (!streams) return null;
+    // Persist even when null: JSON.stringify(null) === "null", a non-empty
+    // marker that getActivityStreamsJson returns and the read above parses back
+    // to null — so a streamless activity is checked once, not on every view.
     await saveActivityStreams(activity.id, JSON.stringify(streams));
     return streams;
   } catch (error) {

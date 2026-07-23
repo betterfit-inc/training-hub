@@ -72,6 +72,8 @@ DONE = committed, verify green · SKIPPED = intentionally not done (reason) · B
 
 | T3.12 | Type-representation fixes | DONE (SIGN-OFF) | _(this commit)_ | green | **Three parts.** (A, G3.6) `is_race` decoded to `boolean` once at the db seam via `sqliteBool` + `decodeActivity` (encode 0/1 on write); the 3 `=== 1` UI comparisons removed (+ a 4th found in `coach.ts`); test-first (`db.bool.test.ts` red pre-helper). (B, G3.3) `StravaGear` `distance?`/`retired?` → `T \| null`; `mapGear` provides explicit `null`; type-only. (C, G8.4) `pmc-chart` now keyboard-navigable (Arrow/Home/End, `tabIndex`, mirrors activity-chart) with a jsdom component test (red pre-fix). 74 unit tests. **Out of scope (noted):** libSQL `Row` objects still reach client components ("Only plain objects…") — a full row→plain mapping is a larger change. |
 
+| T3.6 | Strava resilience | DONE (SIGN-OFF) | _(this commit)_ | green | **Behavior-changing, labeled (G7.2, G7.4).** `apiGet` now honors `Retry-After` with a bounded retry (default 5s, cap 30s, max 2 retries) instead of aborting a whole sync on one 429 (logs each backoff). Token-refresh fetch gains `AbortSignal.timeout(15s)`. Streamless activities cache a negative marker (JSON `null`) so they stop re-hitting the API — return contract unchanged (`null` in → `null` out). Test-first: 5 tests (mocked fetch, temp DB, stubbed sleep — no real delays), red pre-fix. 79 unit tests. |
+
 **M1 seams checkpoint:** full `npm run verify` (incl. 6 Playwright e2e) re-run by the orchestrator after T1.1–T1.5 — green.
 
 **M0 acceptance met:** `npm run verify` is green on `build/overnight` (independently re-run by the orchestrator, exit 0, incl. 6 Playwright specs), runs against a local sqlite file only, and CI is wired to run it on every PR.

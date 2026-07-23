@@ -165,9 +165,9 @@ export function ReviewFlow({
   }
 
   // Keep the handlers fresh for the global keyboard listener.
-  const keyApi = useRef({ confirmCurrent, goto, index, rpe: patchForm });
+  const keyApi = useRef({ confirmCurrent, goto, index, patchForm });
   useEffect(() => {
-    keyApi.current = { confirmCurrent, goto, index, rpe: patchForm };
+    keyApi.current = { confirmCurrent, goto, index, patchForm };
   });
 
   useEffect(() => {
@@ -200,7 +200,7 @@ export function ReviewFlow({
         kmInputRef.current?.select();
       } else if (/^[0-9]$/.test(event.key)) {
         const value = event.key === "0" ? 10 : Number(event.key);
-        api.rpe({ rpe: value });
+        api.patchForm({ rpe: value });
       }
     }
     window.addEventListener("keydown", onKeyDown);

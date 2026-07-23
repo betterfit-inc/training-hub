@@ -52,6 +52,8 @@ DONE = committed, verify green · SKIPPED = intentionally not done (reason) · B
 
 | T2.9 | i18n tidy | DONE | _(this commit)_ | green | Replaced 7 of 9 `as Record<>` casts with `satisfies Record<Union,string>` (restores key-checking; parity mechanism intact/stronger); 2 kept (runtime numeric/arbitrary-string indexes, justified). `createManualActivityAction` now uses `t.errors.*` (added `zeroDistance`/`pickShoe` to en+pt). `sports.ts` hardcoded labels + `categoryLabel()` were dead duplicates (display already routes through `t.sports`) → removed; dict is now the single label source. No visible change (PT strings already existed). Also narrowed `method` types to `LoadMethod`. |
 
+| T2.8 | Repo module map + form paradigm | DONE | _(this commit)_ | green | Added `MAP.md` (entry points, per-module one-liners incl. the new `identity`/`telemetry`/`baseline`/`constants` seams, main flows, conventions). Form paradigm (G14.1) is **documented** rather than force-converted: `<form action>`+FormData is the default; the two controlled forms (`ThresholdsForm`/`ManualActivityForm`) keep `useState` because they need live per-keystroke formatting/validation — converting them would break that UX. Doc-only; gate unaffected. |
+
 **M1 seams checkpoint:** full `npm run verify` (incl. 6 Playwright e2e) re-run by the orchestrator after T1.1–T1.5 — green.
 
 **M0 acceptance met:** `npm run verify` is green on `build/overnight` (independently re-run by the orchestrator, exit 0, incl. 6 Playwright specs), runs against a local sqlite file only, and CI is wired to run it on every PR.

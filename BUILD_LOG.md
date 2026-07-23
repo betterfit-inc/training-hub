@@ -54,6 +54,8 @@ DONE = committed, verify green · SKIPPED = intentionally not done (reason) · B
 
 | T2.8 | Repo module map + form paradigm | DONE | _(this commit)_ | green | Added `MAP.md` (entry points, per-module one-liners incl. the new `identity`/`telemetry`/`baseline`/`constants` seams, main flows, conventions). Form paradigm (G14.1) is **documented** rather than force-converted: `<form action>`+FormData is the default; the two controlled forms (`ThresholdsForm`/`ManualActivityForm`) keep `useState` because they need live per-keystroke formatting/validation — converting them would break that UX. Doc-only; gate unaffected. |
 
+| T3.1 | Enable FK enforcement | DONE (SIGN-OFF) | _(this commit)_ | green | **Behavior-changing, labeled.** Regression guard `db.fk.test.ts` (isolated temp `file:` DB) asserts deleting an activity leaves zero orphaned splits/streams/load/chat rows. Fix: explicit one-shot `PRAGMA foreign_keys = ON` on the local path in `migrate()`. **Finding:** the local `@libsql/client` build already defaults FK ON per connection (verified via a forced-OFF probe → orphans), so there was no live local bug; the PRAGMA makes G5.5 explicit. **Remote caveat:** Turso HTTP is stateless per request → FK must be enforced server-side there (documented in code). Simplified from an initial per-connection Proxy wrapper down to the one-shot (leanest solution). |
+
 **M1 seams checkpoint:** full `npm run verify` (incl. 6 Playwright e2e) re-run by the orchestrator after T1.1–T1.5 — green.
 
 **M0 acceptance met:** `npm run verify` is green on `build/overnight` (independently re-run by the orchestrator, exit 0, incl. 6 Playwright specs), runs against a local sqlite file only, and CI is wired to run it on every PR.

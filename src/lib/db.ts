@@ -23,13 +23,15 @@ export const UPLOADS_DIR = path.join(DATA_DIR, "uploads");
 // TURSO_DATABASE_URL (+ TURSO_AUTH_TOKEN) at a Turso database.
 const LOCAL_URL = "file:data/app.db";
 
+// DATABASE_URL is a local-only override for an isolated SQLite file (E2E tests
+// point it at data/e2e.db). Unset in dev/prod, so the default path is unchanged.
+const DB_URL = process.env.TURSO_DATABASE_URL || process.env.DATABASE_URL || LOCAL_URL;
+const IS_LOCAL_FILE = DB_URL.startsWith("file:");
+
 function makeClient(): Client {
-  // DATABASE_URL is a local-only override for an isolated SQLite file (E2E tests
-  // point it at data/e2e.db). Unset in dev/prod, so the default path is unchanged.
-  const url = process.env.TURSO_DATABASE_URL || process.env.DATABASE_URL || LOCAL_URL;
-  if (url.startsWith("file:")) fs.mkdirSync(DATA_DIR, { recursive: true });
+  if (IS_LOCAL_FILE) fs.mkdirSync(DATA_DIR, { recursive: true });
   return createClient({
-    url,
+    url: DB_URL,
     authToken: process.env.TURSO_AUTH_TOKEN,
     intMode: "number",
   });
@@ -289,6 +291,13 @@ async function currentSchemaVersion(): Promise<number> {
 }
 
 async function migrate(): Promise<void> {
+  // Enforce foreign keys so ON DELETE CASCADE fires. The local @libsql/client build
+  // already defaults PRAGMA foreign_keys=ON per connection; issuing it here makes
+  // that guarantee explicit (G5.5) instead of relying on the driver default. Remote
+  // Turso is stateless per request, so the pragma does not persist there — FK
+  // enforcement on Turso must be handled server-side.
+  if (IS_LOCAL_FILE) await client.execute("PRAGMA foreign_keys = ON");
+
   // `schema_version` holds the highest applied migration in its single row. Its
   // own creation is idempotent, so it is safe on brand-new and legacy databases
   // alike; a database created before versioning existed reads as version 0.

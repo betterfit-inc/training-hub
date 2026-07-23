@@ -4,10 +4,10 @@ Branch: `build/overnight` off `main`. Autonomous, unattended run. **Nothing is m
 
 ## Summary
 
-- **Delivered:** the full self-validation harness (M0), all product-path seams (M1 T1.1–T1.5), 8 of 11 safe cleanups (M2), **all 12 correctness fixes (M3)**, and a minimal reversible auth boundary (T1.6). 33 task commits, branch green throughout.
-- **`npm run verify` is green** on the final branch (typecheck + lint + format:check + 100 vitest unit tests + 9 Playwright e2e + knip + madge), independently re-run by the orchestrator. CI runs it on every PR.
-- **Deferred (not done):** the three largest pure-cleanup refactors — T2.1 (gear convergence), T2.2 (cross-page extraction), T2.6 (split oversized files). Rationale below. Everything behavior-changing is clearly labeled with risk notes; the safe cleanups are behavior-preserving.
-- Two separate **research deliverables** were also produced (see end): `FITNESS_METHODOLOGY.md`, `FEATURE_IDEAS.md`.
+- **Delivered:** the full self-validation harness (M0), all product-path seams (M1 T1.1–T1.5), **all 11 safe cleanups (M2)**, **all 12 correctness fixes (M3)**, a minimal reversible auth boundary (T1.6), and — post-review, on the owner's direction — auth page-gating and a prod loads recompute. Branch green throughout.
+- **`npm run verify` is green** on the final branch (typecheck + lint + format:check + 106 vitest unit tests + 10 Playwright e2e + knip + madge), independently re-run by the orchestrator. CI runs it on every PR.
+- Everything behavior-changing is labeled SIGN-OFF with risk notes; safe cleanups are behavior-preserving. The single-SQL-seam, single-mutation-seam, and i18n parity invariants are preserved throughout.
+- Two separate **research deliverables** were also produced (see end): `FITNESS_METHODOLOGY.md`, `FEATURE_IDEAS.md`. Follow-up FEATURES (Critical Speed/mFTP, capture `start_date_local`, duration curves) are a separate effort, not in this PR.
 
 ## How this was run
 - Orchestrator dispatched one fresh sub-agent per task with only that task's context. Tasks stacked sequentially on `build/overnight` (commits compose; the branch must never go red). The orchestrator reviewed each diff, re-ran the gate, and committed.
@@ -63,9 +63,9 @@ DONE = committed, verify green · SIGN-OFF = behavior-changing (built anyway per
 | T2.11 | Query efficiency | DONE | `1571b3b` | `attachSplits` filters by id (no whole-table scan); `BIKE_SELECT` mileage via one `GROUP BY` join (was 4×/row); `recomputeAllLoads` reads `raw_json` only for rides (proven identical via 10-case `computeLoad` diff); `countPending` via React `cache()` (layout+page share one query). |
 | T2.9 | i18n tidy | DONE | `16c27c6` | 7 of 9 `as Record<>` → `satisfies Record<Union,string>` (key-checking restored; parity stronger); 2 kept (justified). `createManualActivityAction` → `t.errors.*`. Dead duplicate sport labels removed (dict is the single source). |
 | T2.8 | Module map + form paradigm | DONE | `0bbbff5` | `MAP.md` (entry points, per-module jobs incl. new seams, flows). Form paradigm (G14.1) documented, not force-converted (the two controlled forms need live per-keystroke formatting). |
-| **T2.1** | **Converge shoe/bike gear** | **SKIPPED (deferred)** | — | The largest refactor (7 sibling files, gear is core). Pure cleanup, highest regression risk, best done attended so a reviewer can eyeball the converged abstraction. Deferred to keep the unattended branch stable and green. |
-| **T2.2** | **Extract cross-page patterns** | **SKIPPED (deferred)** | — | Medium multi-page dedup (window selector, week/day keying, gear→Option, ride/run row, `SelectItem` fragment). Deferred with T2.1/T2.6 as the remaining cleanup pass; no correctness impact. |
-| **T2.6** | **Split oversized files** | **SKIPPED (deferred)** | — | Mechanical but high-churn (`i18n`, `db`, `review-flow`, `actions`, `activity-chart` — several grew tonight). Deferred to avoid a large destabilizing diff at the end of an unattended run. |
+| T2.2 | Extract cross-page patterns | DONE | `ff84452` | Shared `windows.ts` (time-window + day counts), week/day keying (`parseLocalDate`/`eachDay`/`dailyLoadSeries`), `gear.ts` (`toGearOption`), and `GearSelectItem`, routed through all call sites. The races-page activity row genuinely differs and was left separate (G14.4). Behavior-preserving. |
+| T2.6 | Split oversized files | DONE | `b18744e` | `i18n/`→{en,pt,index} (`Dict=typeof en` parity preserved); `db.ts`→`db/` folder with `client.ts` the sole libsql importer (single-SQL-seam intact), migrations/helpers/domain query modules re-exported via index; `actions.ts` kept the one `"use server"` seam with helpers extracted to `action-helpers.ts`; review-flow + activity-chart shed pure helpers/subcomponents. All imports still resolve. |
+| T2.1 | Converge shoe/bike gear | DONE | `8d8da1d` | (was deferred; done on the user's direction.) Shared `Gear` base type + per-entity specialization; `GearCard`/`GearDialog`/`RetireGearButton`/`GearMatcher`/`GearCollection` parameterized by kind. Shoe (wear/retirement) and bike (indoor/outdoor/ride_count) supply their own bits; every server action preserved; shoe/bike sibling dialogs deleted. 6 characterization tests (both paths) written first. Behavior-preserving. |
 
 ---
 

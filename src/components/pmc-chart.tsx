@@ -111,7 +111,9 @@ export function PmcChart({ points, weekly }: { points: PmcSeriesPoint[]; weekly:
       setHover(Math.min(n - 1, (hover == null ? -1 : hover) + 1));
       e.preventDefault();
     } else if (e.key === "ArrowLeft") {
-      setHover(Math.max(0, (hover == null ? 1 : hover) - 1));
+      // From no selection, step back from the count so we land on the LAST
+      // point (n - 1); otherwise step back one from the current point.
+      setHover(Math.max(0, (hover == null ? n : hover) - 1));
       e.preventDefault();
     } else if (e.key === "Home") {
       setHover(0);

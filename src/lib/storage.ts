@@ -36,12 +36,22 @@ export class InvalidImageError extends Error {
 
 /** True if the ftyp box's brand list (major + compatible) advertises AVIF. */
 function hasAvifBrand(bytes: Uint8Array): boolean {
-  // Brands are 4 bytes each, starting right after the 8-byte box header. Scan a
-  // small window rather than parse the full box.
-  const end = Math.min(bytes.length, 32);
-  for (let i = 8; i + 4 <= end; i += 4) {
-    const brand = String.fromCharCode(bytes[i], bytes[i + 1], bytes[i + 2], bytes[i + 3]);
-    if (brand === "avif" || brand === "avis") return true;
+  const brandAt = (i: number): string =>
+    String.fromCharCode(bytes[i], bytes[i + 1], bytes[i + 2], bytes[i + 3]);
+  const isAvif = (brand: string): boolean => brand === "avif" || brand === "avis";
+
+  // ftyp box layout: [0,4) size (big-endian, unsigned), [4,8) "ftyp", [8,12)
+  // major brand, [12,16) minor version, [16,end) compatible brands (4B each).
+  // Read the declared box size and scan EVERY brand, not just a fixed 32-byte
+  // window — a valid AVIF may list its `avif`/`avis` brand deeper in the list.
+  const boxSize = ((bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3]) >>> 0;
+  // size 0 means "to end of file"; a bogus/too-small size also falls back to
+  // the buffer length. Always clamp to the actual buffer so we never overread.
+  const end = Math.min(bytes.length, boxSize > 8 ? boxSize : bytes.length);
+
+  if (end >= 12 && isAvif(brandAt(8))) return true; // major brand
+  for (let i = 16; i + 4 <= end; i += 4) {
+    if (isAvif(brandAt(i))) return true; // compatible brands
   }
   return false;
 }

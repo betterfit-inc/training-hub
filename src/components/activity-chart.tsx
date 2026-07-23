@@ -55,8 +55,15 @@ export function ActivityChart({
     return new Set(wanted.filter((k) => available.includes(k)));
   }, [isRide, isRun, hasElevation, available]);
 
+  const timeAvailable = streams.timeS.some((v) => v != null);
+  const distAvailable = streams.distanceKm.some((v) => v != null);
+  // Prefer the distance axis, but an activity with no usable distance stream
+  // (treadmill / pool) has only time to plot against — defaulting to distance
+  // there leaves an empty x-axis and a blank chart.
+  const defaultXMode: XMode = distAvailable ? "distance" : "time";
+
   const [active, setActive] = useState<Set<SeriesKey>>(defaultActive);
-  const [xMode, setXMode] = useState<XMode>("distance");
+  const [xMode, setXMode] = useState<XMode>(defaultXMode);
   const [hover, setHover] = useState<number | null>(null);
 
   // Client-side navigation between two /activity/[id] pages can reuse this same
@@ -67,12 +74,9 @@ export function ActivityChart({
   if (activityId !== prevActivityId) {
     setPrevActivityId(activityId);
     setActive(defaultActive);
-    setXMode("distance");
+    setXMode(defaultXMode);
     setHover(null);
   }
-
-  const timeAvailable = streams.timeS.some((v) => v != null);
-  const distAvailable = streams.distanceKm.some((v) => v != null);
   const xs = xMode === "time" && timeAvailable ? streams.timeS : streams.distanceKm;
   const xExtent = useMemo(() => {
     let min = Infinity;

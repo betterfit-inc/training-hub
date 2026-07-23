@@ -70,4 +70,32 @@ describe("ActivityChart default-series resync on activity change", () => {
     expect(pressed("Cadence")).toBe("true");
     expect(pressed("Heart rate")).toBe("true");
   });
+
+  it("selects the time axis when the new activity has no distance stream", () => {
+    // Activity A: a normal run with a distance stream (distance axis default).
+    const withDistance = makeStreams({
+      heartrate: ramp(120, 160),
+      altitudeM: ramp(10, 40),
+    });
+    const { rerender, container } = render(
+      <ActivityChart activityId={1} streams={withDistance} isRun={true} isRide={false} />
+    );
+    expect(pressed("Distance")).toBe("true");
+
+    // Activity B: a treadmill run — time present, distance stream all null. The
+    // resync used to force xMode back to "distance", leaving an empty x-axis and
+    // a blank chart. It must fall back to the time axis instead.
+    const timeOnly = makeStreams({
+      distanceKm: Array.from({ length: N }, () => null),
+      timeS: ramp(0, 1200),
+      heartrate: ramp(120, 160),
+    });
+    rerender(<ActivityChart activityId={2} streams={timeOnly} isRun={true} isRide={false} />);
+
+    // Time is the active x-axis; the distance toggle is absent (no usable data).
+    expect(pressed("Time")).toBe("true");
+    expect(screen.queryByRole("button", { name: "Distance" })).toBeNull();
+    // A series is actually drawn, not a blank chart.
+    expect(container.querySelectorAll("path").length).toBeGreaterThan(0);
+  });
 });

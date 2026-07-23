@@ -24,6 +24,14 @@ describe("raceCategory", () => {
     expect(raceCategory(race(0))).toBe("other");
   });
 
+  it("returns other for a non-finite or negative distance", () => {
+    // A NaN distance used to fall through every band and mis-bucket as 5k
+    // because NaN fails all `>=` comparisons.
+    expect(raceCategory(race(NaN))).toBe("other");
+    expect(raceCategory(race(Number.POSITIVE_INFINITY))).toBe("other");
+    expect(raceCategory(race(-5))).toBe("other");
+  });
+
   // T3.11 — the bands must be contiguous: every distance between the smallest
   // band and ultra resolves to a real category, with no dead gaps.
   it("fills the old 15k/half gap (17–18 km)", () => {

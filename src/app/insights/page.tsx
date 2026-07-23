@@ -9,16 +9,11 @@ import { computeInsights, type CategoryStats } from "@/lib/insights";
 import { fmtHoursMin, fmtKm, fmtPace } from "@/lib/format";
 import { fill, fillStr, type Dict } from "@/lib/i18n";
 import type { SportCategory } from "@/lib/sports";
+import { timeWindows } from "@/lib/windows";
 
 export const metadata = { title: "Insights" };
 
-const WINDOWS = [
-  { key: "30d", days: 30 },
-  { key: "60d", days: 60 },
-  { key: "90d", days: 90 },
-  { key: "6m", days: 183 },
-  { key: "1y", days: 365 },
-] as const;
+const WINDOWS = timeWindows(["30d", "60d", "90d", "6m", "1y"]);
 
 const CATEGORY_ICON_SPORT: Record<SportCategory, string> = {
   run: "Run",

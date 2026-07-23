@@ -54,8 +54,7 @@ import {
   type CoachPmc,
   type CoachStreamSummary,
 } from "./coach";
-import { computeLoad, computePmc, type PmcPoint } from "./fitness";
-import { localDateInputValue } from "./format";
+import { computeLoad, computePmc, dailyLoadSeries, type PmcPoint } from "./fitness";
 import {
   ensureActivityStreams,
   stravaConfigured,
@@ -618,41 +617,13 @@ export type CoachMessageResult = { ok: true; reply: string } | { ok: false; erro
 export type WeeklyDigestResult =
   { ok: true; text: string; generatedAt: string } | { ok: false; error: string };
 
-function parseLocalDate(key: string): Date {
-  const [y, m, d] = key.split("-").map(Number);
-  return new Date(y, m - 1, d);
-}
-
-/** Inclusive list of local YYYY-MM-DD day keys from `from` to `to`. */
-function eachDay(from: string, to: string): string[] {
-  const out: string[] = [];
-  const cursor = parseLocalDate(from);
-  const end = parseLocalDate(to);
-  while (cursor <= end) {
-    out.push(localDateInputValue(cursor));
-    cursor.setDate(cursor.getDate() + 1);
-  }
-  return out;
-}
-
 /**
  * Whole-history Performance Management Chart, gap-filled to today. Mirrors the
  * fitness page: sum TSS per local calendar day, then run the EWMA. Empty when no
  * confirmed activity has a training load yet.
  */
 async function buildPmc(): Promise<PmcPoint[]> {
-  const loads = await listActivityLoadsForPmc();
-  if (loads.length === 0) return [];
-  const byDay = new Map<string, number>();
-  for (const load of loads) {
-    const key = localDateInputValue(new Date(load.started_at));
-    byDay.set(key, (byDay.get(key) ?? 0) + load.tss);
-  }
-  const dayKeys = [...byDay.keys()].sort();
-  const today = localDateInputValue(new Date());
-  const lastDay = dayKeys[dayKeys.length - 1] > today ? dayKeys[dayKeys.length - 1] : today;
-  const daily = eachDay(dayKeys[0], lastDay).map((date) => ({ date, load: byDay.get(date) ?? 0 }));
-  return computePmc(daily);
+  return computePmc(dailyLoadSeries(await listActivityLoadsForPmc()));
 }
 
 function pmcPoint(point: PmcPoint | null | undefined): CoachPmc | null {

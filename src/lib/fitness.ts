@@ -2,6 +2,7 @@
 // Management Chart (CTL/ATL/TSB) and Friel training zones. No DB imports — the
 // data layer feeds these functions and persists their output.
 import { isRideSport, rideMetrics } from "./cycling";
+import { eachDay, localDateInputValue } from "./format";
 import { isRunSport } from "./validate";
 
 export interface AthleteThresholds {
@@ -143,6 +144,26 @@ export interface PmcPoint {
   ctl: number;
   atl: number;
   tsb: number;
+}
+
+/**
+ * Bucket persisted training loads into a gap-filled ascending daily series
+ * (local calendar days) spanning the earliest load day through today, ready to
+ * feed straight into computePmc. Empty when there are no loads.
+ */
+export function dailyLoadSeries(
+  loads: { started_at: string; tss: number }[]
+): { date: string; load: number }[] {
+  const byDay = new Map<string, number>();
+  for (const load of loads) {
+    const key = localDateInputValue(new Date(load.started_at));
+    byDay.set(key, (byDay.get(key) ?? 0) + load.tss);
+  }
+  if (byDay.size === 0) return [];
+  const dayKeys = [...byDay.keys()].sort();
+  const today = localDateInputValue(new Date());
+  const lastDay = dayKeys[dayKeys.length - 1] > today ? dayKeys[dayKeys.length - 1] : today;
+  return eachDay(dayKeys[0], lastDay).map((date) => ({ date, load: byDay.get(date) ?? 0 }));
 }
 
 // Exponentially-weighted decay constants: fitness over ~42 days, fatigue ~7.

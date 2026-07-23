@@ -11,6 +11,7 @@ import {
 } from "@/components/settings-forms";
 import { ThresholdsForm } from "@/components/thresholds-form";
 import { getAthleteThresholds, getMeta, listBikes, listShoes } from "@/lib/db";
+import { toBikeOption, toShoeOption } from "@/lib/gear";
 import { getDict } from "@/lib/lang";
 import { isStravaConnected, stravaConfigured, tryFetchAllGear } from "@/lib/strava";
 import { fmtDate, fmtDateLong, fmtTime } from "@/lib/format";
@@ -172,13 +173,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
             <CardContent>
               {gear && gear.length > 0 ? (
                 <GearMatcher
-                  shoes={shoes.map((s) => ({
-                    id: s.id,
-                    name: s.name,
-                    role: s.role,
-                    retired: !!s.retired_at,
-                    gearId: s.strava_gear_id,
-                  }))}
+                  shoes={shoes.map((s) => ({ ...toShoeOption(s), gearId: s.strava_gear_id }))}
                   gear={gear}
                 />
               ) : (
@@ -199,13 +194,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
             <CardContent>
               {bikeGear && bikeGear.length > 0 ? (
                 <BikeMatcher
-                  bikes={bikes.map((b) => ({
-                    id: b.id,
-                    name: b.name,
-                    role: b.role,
-                    retired: !!b.retired_at,
-                    gearId: b.strava_gear_id,
-                  }))}
+                  bikes={bikes.map((b) => ({ ...toBikeOption(b), gearId: b.strava_gear_id }))}
                   gear={bikeGear}
                 />
               ) : (
@@ -224,14 +213,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
           </CardHeader>
           <CardContent>
             {shoes.length > 0 ? (
-              <ManualActivityForm
-                shoes={shoes.map((s) => ({
-                  id: s.id,
-                  name: s.name,
-                  role: s.role,
-                  retired: !!s.retired_at,
-                }))}
-              />
+              <ManualActivityForm shoes={shoes.map(toShoeOption)} />
             ) : (
               <p className="text-sm text-muted-foreground">{t.settingsPage.addShoeFirst}</p>
             )}

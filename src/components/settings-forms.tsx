@@ -14,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { GearSelectItem } from "@/components/gear-select-item";
 import { useI18n } from "@/components/i18n-provider";
 import {
   createManualActivityAction,
@@ -94,14 +95,7 @@ export function GearMatcher({
             <SelectContent>
               <SelectItem value={NONE}>{t.settingsPage.notLinked}</SelectItem>
               {gear.map((g) => (
-                <SelectItem key={g.id} value={g.id}>
-                  <span className="truncate">{g.name}</span>
-                  {g.distance ? (
-                    <span className="text-xs text-muted-foreground">
-                      · {fmtKm(g.distance / 1000, 0)}
-                    </span>
-                  ) : null}
-                </SelectItem>
+                <GearSelectItem key={g.id} gear={g} />
               ))}
             </SelectContent>
           </Select>
@@ -150,14 +144,7 @@ export function BikeMatcher({
             <SelectContent>
               <SelectItem value={NONE}>{t.settingsPage.notLinked}</SelectItem>
               {gear.map((g) => (
-                <SelectItem key={g.id} value={g.id}>
-                  <span className="truncate">{g.name}</span>
-                  {g.distance ? (
-                    <span className="text-xs text-muted-foreground">
-                      · {fmtKm(g.distance / 1000, 0)}
-                    </span>
-                  ) : null}
-                </SelectItem>
+                <GearSelectItem key={g.id} gear={g} />
               ))}
             </SelectContent>
           </Select>

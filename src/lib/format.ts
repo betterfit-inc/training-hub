@@ -167,6 +167,24 @@ export function mondayOf(date: Date): Date {
   return d;
 }
 
+/** Parse a local YYYY-MM-DD day key back into a local wall-clock Date. Inverse of localDateInputValue. */
+export function parseLocalDate(key: string): Date {
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+/** Inclusive list of local YYYY-MM-DD day keys from `from` to `to`. */
+export function eachDay(from: string, to: string): string[] {
+  const out: string[] = [];
+  const cursor = parseLocalDate(from);
+  const end = parseLocalDate(to);
+  while (cursor <= end) {
+    out.push(localDateInputValue(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return out;
+}
+
 export function weekLabel(monday: Date, lang: Lang = "en", now = new Date()): string {
   const thisMonday = mondayOf(now);
   const diffDays = Math.round((thisMonday.getTime() - monday.getTime()) / 86400000);

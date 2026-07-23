@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useI18n } from "@/components/i18n-provider";
-import { fmtDayMonth } from "@/lib/format";
+import { fmtDayMonth, parseLocalDate } from "@/lib/format";
 
 export interface PmcSeriesPoint {
   date: string; // YYYY-MM-DD local
@@ -31,11 +31,6 @@ const MAIN_BOTTOM = TOP + MAIN_H;
 const TSB_TOP = MAIN_BOTTOM + GAP;
 const TSB_MID = TSB_TOP + TSB_H / 2;
 const PMC_H = TSB_TOP + TSB_H + AXIS_H;
-
-function parseLocalDate(key: string): Date {
-  const [y, m, d] = key.split("-").map(Number);
-  return new Date(y, m - 1, d);
-}
 
 function niceMax(value: number): number {
   if (value <= 0) return 1;

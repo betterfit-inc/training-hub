@@ -32,7 +32,7 @@ import { fmtCadence, fmtEnergy, fmtPower, fmtSpeed, isRideSport, rideMetrics } f
 import { fmtDateLong, fmtDuration, fmtElev, fmtHr, fmtKm, fmtPace, fmtTime } from "@/lib/format";
 import type { Dict } from "@/lib/i18n";
 import { isRunSport } from "@/lib/validate";
-import type { BikeOption, ShoeOption } from "@/lib/types";
+import { toBikeOption, toShoeOption } from "@/lib/gear";
 
 export async function generateMetadata({ params }: PageProps<"/activity/[id]">) {
   const { id } = await params;
@@ -181,22 +181,8 @@ export default async function ActivityPage({ params }: PageProps<"/activity/[id]
   const ride = isRideSport(activity.sport_type);
   const confirmed = activity.status === "confirmed";
 
-  const shoes: ShoeOption[] = ride
-    ? []
-    : (await listShoes()).map((s) => ({
-        id: s.id,
-        name: s.name,
-        role: s.role,
-        retired: !!s.retired_at,
-      }));
-  const bikes: BikeOption[] = ride
-    ? (await listBikes()).map((b) => ({
-        id: b.id,
-        name: b.name,
-        role: b.role,
-        retired: !!b.retired_at,
-      }))
-    : [];
+  const shoes = ride ? [] : (await listShoes()).map(toShoeOption);
+  const bikes = ride ? (await listBikes()).map(toBikeOption) : [];
   const metrics = ride ? rideMetrics(activity) : null;
 
   // Training load: the persisted value from backfill, else computed on the fly

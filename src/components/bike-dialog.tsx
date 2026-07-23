@@ -23,10 +23,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { GearSelectItem } from "@/components/gear-select-item";
 import { useI18n } from "@/components/i18n-provider";
 import { saveBikeAction, setBikeRetiredAction } from "@/lib/actions";
 import { NONE } from "@/lib/constants";
-import { fmtKm } from "@/lib/format";
 import { fillStr } from "@/lib/i18n";
 import type { Bike, StravaGear } from "@/lib/types";
 
@@ -128,14 +128,7 @@ export function BikeDialog({
                 <SelectContent>
                   <SelectItem value={NONE}>{t.bikeDialog.notLinked}</SelectItem>
                   {gearList.map((gear) => (
-                    <SelectItem key={gear.id} value={gear.id}>
-                      <span className="truncate">{gear.name}</span>
-                      {gear.distance ? (
-                        <span className="text-xs text-muted-foreground">
-                          · {fmtKm(gear.distance / 1000, 0)}
-                        </span>
-                      ) : null}
-                    </SelectItem>
+                    <GearSelectItem key={gear.id} gear={gear} />
                   ))}
                 </SelectContent>
               </Select>

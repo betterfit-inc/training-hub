@@ -1,0 +1,10 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "next": true,
+  "vitest": true,
+  "entry": ["scripts/*.ts"],
+  "project": ["src/**/*.{ts,tsx}", "scripts/**/*.ts"],
+  "ignoreExportsUsedInFile": true,
+  "ignore": ["src/components/ui/**", "src/lib/sports.ts", "src/lib/db.ts"],
+  "ignoreDependencies": ["shadcn", "tw-animate-css", "tailwindcss"]
+}

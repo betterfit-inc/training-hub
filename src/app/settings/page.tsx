@@ -5,11 +5,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { SyncButton } from "@/components/sync-button";
 import { DisconnectButton, GearMatcher, ManualActivityForm } from "@/components/settings-forms";
 import { ThresholdsForm } from "@/components/thresholds-form";
+import { GoalsManager } from "@/components/goals-manager";
 import {
   getAthleteThresholds,
   getHealthSourceStatus,
   getMeta,
   listBikes,
+  listGoals,
   listShoes,
 } from "@/lib/db";
 import { toGearOption } from "@/lib/gear";
@@ -34,6 +36,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
   const shoes = await listShoes();
   const bikes = await listBikes();
   const thresholds = await getAthleteThresholds();
+  const goals = await listGoals();
 
   // Garmin connectivity: "connected" = the standalone sync delivered health data
   // recently. There is no browser OAuth for Garmin, so recency of ingested data
@@ -196,6 +199,16 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
                 {t.settingsPage.garmin[`${garminState}Body` as const]}
               </p>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>{t.settingsPage.goals.title}</CardTitle>
+            <CardDescription>{t.settingsPage.goals.body}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <GoalsManager goals={goals} />
           </CardContent>
         </Card>
 

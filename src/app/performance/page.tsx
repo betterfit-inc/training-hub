@@ -2,7 +2,9 @@ import { GaugeIcon, MedalIcon } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/empty-state";
 import { ApplyThresholdPaceButton } from "@/components/apply-threshold-pace";
-import { getAthleteThresholds, listRunEfforts } from "@/lib/db";
+import { ZonesPanel } from "@/components/zones-panel";
+import { getAthleteThresholds, getTrainingZones, listRunEfforts } from "@/lib/db";
+import { isCoachConfigured } from "@/lib/coach";
 import { getDict } from "@/lib/lang";
 import {
   bestEffortsByDistance,
@@ -45,6 +47,8 @@ export default async function PerformancePage() {
 
   const efforts = await listRunEfforts();
   const thresholds = await getAthleteThresholds();
+  const trainingZones = await getTrainingZones();
+  const coachConfigured = isCoachConfigured();
 
   const best = bestEffortsByDistance(efforts);
   const criticalSpeed = estimateCriticalSpeed(efforts);
@@ -55,6 +59,16 @@ export default async function PerformancePage() {
     <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
       <h1 className="font-display text-4xl font-bold uppercase">{tp.title}</h1>
       <p className="mt-1 text-sm text-muted-foreground">{tp.subtitle}</p>
+
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle>{t.zones.title}</CardTitle>
+          <CardDescription>{t.zones.subtitle}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ZonesPanel initial={trainingZones} configured={coachConfigured} />
+        </CardContent>
+      </Card>
 
       {best.length === 0 ? (
         <div className="mt-6">

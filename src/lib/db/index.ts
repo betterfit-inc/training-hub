@@ -11,3 +11,5 @@ export * from "./coach";
 export * from "./benchmarks";
 export * from "./health";
 export * from "./readiness";
+export * from "./goals";
+export * from "./zones";

@@ -159,6 +159,21 @@ export interface HealthMetricRow {
 // The insert shape (a row without its autoincrement id).
 export type HealthMetricInput = Omit<HealthMetricRow, "id">;
 
+// A race/target the athlete is training for. Feeds the zones agent and the coach
+// so advice is anchored to real goals (like Runna's plan context).
+export interface Goal {
+  id: number;
+  name: string;
+  race_date: string | null; // YYYY-MM-DD
+  distance_km: number | null;
+  goal_time_s: number | null;
+  notes: string | null;
+  priority: number; // 1 = primary goal, 0 = secondary
+  created_at: string;
+}
+
+export type GoalInput = Omit<Goal, "id" | "created_at">;
+
 // A bike carries exactly the shared gear base (no extra stored field); its
 // distinguishing data lives on BikeWithMileage.
 export type Bike = Gear;

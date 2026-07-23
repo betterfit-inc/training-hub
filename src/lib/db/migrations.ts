@@ -276,6 +276,25 @@ const MIGRATIONS: Migration[] = [
       );
     },
   },
+  // 8: athlete goals (races/targets) — feed the zones agent and the coach so its
+  // advice is anchored to what the athlete is training for.
+  {
+    version: 8,
+    up: async () => {
+      await client.execute(
+        `CREATE TABLE IF NOT EXISTS athlete_goals (
+           id INTEGER PRIMARY KEY,
+           name TEXT NOT NULL,
+           race_date TEXT,
+           distance_km REAL,
+           goal_time_s INTEGER,
+           notes TEXT,
+           priority INTEGER NOT NULL DEFAULT 0,
+           created_at TEXT DEFAULT (datetime('now'))
+         )`
+      );
+    },
+  },
 ];
 
 async function currentSchemaVersion(): Promise<number> {

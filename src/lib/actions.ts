@@ -43,6 +43,12 @@ import {
   getResolvedMetricsForDate,
   getLatestHealthDate,
   setReadinessNarrative,
+  listGoals,
+  createGoal,
+  deleteGoal,
+  getRunningFieldSignals,
+  setTrainingZones,
+  getTrainingZones,
   type BikeFields,
   type ShoeFields,
 } from "./db";
@@ -53,6 +59,8 @@ import {
   buildActivityContext,
   buildDigestContext,
   buildReadinessContext,
+  buildZonesContext,
+  deriveZones,
   isCoachConfigured,
   runCoachChat,
   runReadinessSummary,
@@ -71,7 +79,7 @@ import {
   syncActivities,
   type SyncResult,
 } from "./strava";
-import { parseId, validateSplits } from "./validate";
+import { parseFiniteNumber, parseId, validateSplits } from "./validate";
 import { fail, type ActionResult } from "./action-result";
 import { logger } from "./telemetry";
 import { authConfigured, createSession, destroySession, requireAuth, verifyPassword } from "./auth";
@@ -84,6 +92,7 @@ import {
   pmcPoint,
   refreshAll,
 } from "./action-helpers";
+import type { DerivedZones } from "./zones";
 import type { Feeling, HealthMetric, HealthMetricRow, SplitInput } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -724,6 +733,7 @@ export async function sendCoachMessageAction(input: {
       streams = null;
     }
 
+    const [goals, zones] = await Promise.all([listGoals(), getTrainingZones()]);
     const context = buildActivityContext({
       activity,
       load,
@@ -736,6 +746,8 @@ export async function sendCoachMessageAction(input: {
         workoutNotes: activity.workout_notes,
         healthNotes: activity.health_notes,
       },
+      goals,
+      zones,
     });
 
     const history = (await listActivityChat(activity.id)).map((row) => ({
@@ -936,6 +948,103 @@ export async function generateReadinessNarrativeAction(): Promise<ReadinessNarra
     const saved = await setReadinessNarrative(text);
     refreshAll();
     return { ok: true, text: saved.text, generatedAt: saved.generatedAt };
+  } catch (error) {
+    return fail(error, t.errors.coachFailed);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Goals — races/targets the athlete is training for (context for the coach +
+// the zones agent).
+// ---------------------------------------------------------------------------
+
+/** Parse "h:mm:ss" or "mm:ss" to seconds; null for blank/invalid. */
+function parseDurationToSeconds(input: string): number | null {
+  const s = input.trim();
+  if (!s) return null;
+  const parts = s.split(":").map((p) => Number(p));
+  if (parts.some((n) => !Number.isFinite(n) || n < 0)) return null;
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  if (parts.length === 1) return parts[0];
+  return null;
+}
+
+export async function createGoalAction(input: {
+  name: string;
+  raceDate: string;
+  distanceKm: string;
+  goalTime: string;
+  notes: string;
+  primary: boolean;
+}): Promise<ActionResult> {
+  const t = await dict();
+  if (!(await requireAuth())) return { ok: false, error: t.errors.unauthorized };
+  const name = input.name.trim();
+  if (!name) return { ok: false, error: t.errors.goalNeedsName };
+  try {
+    const distance = input.distanceKm.trim() ? parseFiniteNumber(input.distanceKm) : null;
+    if (input.distanceKm.trim() && distance === null) {
+      return { ok: false, error: t.errors.invalidGoal };
+    }
+    const raceDate = /^\d{4}-\d{2}-\d{2}$/.test(input.raceDate.trim())
+      ? input.raceDate.trim()
+      : null;
+    await createGoal({
+      name,
+      race_date: raceDate,
+      distance_km: distance,
+      goal_time_s: parseDurationToSeconds(input.goalTime),
+      notes: input.notes.trim() || null,
+      priority: input.primary ? 1 : 0,
+    });
+    refreshAll();
+    return { ok: true };
+  } catch (error) {
+    return fail(error, t.errors.generic);
+  }
+}
+
+export async function deleteGoalAction(id: number): Promise<ActionResult> {
+  const t = await dict();
+  if (!(await requireAuth())) return { ok: false, error: t.errors.unauthorized };
+  const goalId = parseId(id);
+  if (goalId === null) return { ok: false, error: t.errors.invalidId };
+  try {
+    await deleteGoal(goalId);
+    refreshAll();
+    return { ok: true };
+  } catch (error) {
+    return fail(error, t.errors.generic);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Training zones — the AI agent that derives HR + pace zones from field data.
+// ---------------------------------------------------------------------------
+
+export type ZonesResult = { ok: true; zones: DerivedZones } | { ok: false; error: string };
+
+export async function computeZonesAction(extraContext = ""): Promise<ZonesResult> {
+  const t = await dict();
+  if (!(await requireAuth())) return { ok: false, error: t.errors.unauthorized };
+  if (!isCoachConfigured()) return { ok: false, error: t.errors.coachNotConfigured };
+  try {
+    const [signals, goals] = await Promise.all([getRunningFieldSignals(), listGoals()]);
+    const context = buildZonesContext({
+      signals,
+      goals,
+      extraContext: extraContext.slice(0, 4000),
+    });
+    const ai = await deriveZones(context);
+    const zones: DerivedZones = {
+      ...ai,
+      restingHr: ai.restingHr ?? signals.restingHr,
+      generatedAt: new Date().toISOString(),
+    };
+    await setTrainingZones(zones);
+    refreshAll();
+    return { ok: true, zones };
   } catch (error) {
     return fail(error, t.errors.coachFailed);
   }

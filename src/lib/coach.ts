@@ -3,10 +3,11 @@
 // runs a per-activity chat or a weekly digest. Degrades gracefully — the client
 // is created lazily and every caller guards with isCoachConfigured().
 import Anthropic from "@anthropic-ai/sdk";
-import type { DigestActivity } from "./db";
+import type { DigestActivity, FieldSignals } from "./db";
 import type { AthleteThresholds } from "./fitness";
 import type { ActivityStreams } from "./streams";
-import type { ActivityWithSplits } from "./types";
+import type { ActivityWithSplits, Goal } from "./types";
+import type { DerivedZones } from "./zones";
 import { fmtDateLong, fmtDuration, fmtHr, fmtKm, fmtPace, localStartedAt } from "./format";
 
 export const COACH_MODEL = "claude-opus-4-8";
@@ -108,8 +109,10 @@ export function buildActivityContext(input: {
   pmc: CoachPmc | null;
   streams: CoachStreamSummary | null;
   journal: CoachJournal;
+  goals: Goal[];
+  zones: DerivedZones | null;
 }): string {
-  const { activity, load, thresholds, pmc, streams, journal } = input;
+  const { activity, load, thresholds, pmc, streams, journal, goals, zones } = input;
   const lines: string[] = [];
 
   lines.push("WORKOUT");
@@ -184,6 +187,29 @@ export function buildActivityContext(input: {
     lines.push("");
     lines.push("ATHLETE JOURNAL");
     for (const part of journalParts) lines.push(`- ${part}`);
+  }
+
+  if (goals.length > 0) {
+    lines.push("");
+    lines.push("GOALS");
+    for (const g of goals) lines.push(`- ${goalLine(g)}`);
+  }
+
+  if (zones) {
+    lines.push("");
+    lines.push("REAL TRAINING ZONES (field-derived; use these, not age formulas)");
+    if (zones.lt2Hr || zones.lt2PaceSPerKm)
+      lines.push(
+        `- LT2/threshold: ${zones.lt2Hr ?? "?"} bpm, ${zones.lt2PaceSPerKm ? fmtPace(zones.lt2PaceSPerKm) : "?"}`
+      );
+    for (const z of zones.zones) {
+      const hr = z.hrMin != null || z.hrMax != null ? `${z.hrMin ?? ""}-${z.hrMax ?? ""} bpm` : "";
+      const pace =
+        z.paceMinSPerKm != null || z.paceMaxSPerKm != null
+          ? `${z.paceMinSPerKm ? fmtPace(z.paceMinSPerKm) : ""}-${z.paceMaxSPerKm ? fmtPace(z.paceMaxSPerKm) : ""}`
+          : "";
+      lines.push(`- Z${z.zone}: ${[hr, pace].filter(Boolean).join(" · ")}`);
+    }
   }
 
   return lines.join("\n");
@@ -299,6 +325,8 @@ The athlete's message is preceded by a context block with this workout's metrics
 
 Be concise, specific, and actionable. Use metric units. Write pace as m:ss/km. No filler, no motivational fluff, no restating the whole workout back. If a piece of data is missing, say so briefly instead of inventing it.
 
+When goals and real training zones are provided, coach like you know what they are training for: reference which zone the session fell in, judge it against the goal (e.g. "that is 15s/km off your half-marathon target"), and give the next concrete step. Prefer the athlete's field-derived zones over any age-based estimate.
+
 If the athlete attaches an image (for example a screenshot from TrainingPeaks, Garmin or another tool), read the data in it — numbers, charts, splits, plans — and factor it into your answer, tying it back to this workout and their fitness. If the image is unrelated or unreadable, say so briefly.
 
 Write in plain prose and, where helpful, simple hyphen ("- ") bullet lines. Do NOT use Markdown syntax: no "#" headings, no "*"/"**" bold or italics, no backticks, no tables. The reply is shown as plain text, so any Markdown markers would appear literally.`;
@@ -394,4 +422,161 @@ export async function runWeeklyDigest(context: string): Promise<string> {
     messages: [{ role: "user", content: context }],
   });
   return extractText(res);
+}
+
+// ---------------------------------------------------------------------------
+// Training-zones agent — derives HR + pace zones and LT1/LT2 from the athlete's
+// REAL field data (not an age formula), estimates VO2max from race times, ties
+// it to their goals, and lists what extra info would sharpen it.
+// ---------------------------------------------------------------------------
+
+/** Format a goal line for the context. */
+function goalLine(g: Goal): string {
+  const bits: string[] = [g.name];
+  if (g.distance_km != null) bits.push(`${g.distance_km} km`);
+  if (g.goal_time_s != null) bits.push(`target ${fmtDuration(g.goal_time_s)}`);
+  if (g.race_date) bits.push(`on ${g.race_date}`);
+  if (g.priority > 0) bits.push("(primary)");
+  if (g.notes) bits.push(`- ${g.notes}`);
+  return bits.join(", ");
+}
+
+export function buildZonesContext(input: {
+  signals: FieldSignals;
+  goals: Goal[];
+  extraContext: string;
+}): string {
+  const { signals: s, goals, extraContext } = input;
+  const lines: string[] = [];
+
+  lines.push(`ATHLETE FIELD DATA (running, last ${s.windowDays} days, ${s.runCount} runs)`);
+  lines.push(
+    `- Resting HR: ${s.restingHr} bpm${s.latestHrvMs ? ` · latest overnight HRV ${s.latestHrvMs} ms` : ""}`
+  );
+  lines.push(
+    `- Current stored thresholds: LTHR ${s.thresholds.lthr}, threshold pace ${fmtPace(s.thresholds.thresholdPaceSPerKm)}, max HR ${s.thresholds.maxHr}`
+  );
+
+  lines.push("");
+  lines.push("OBSERVED MAX HR (highest per-activity peaks; watch for optical spikes)");
+  for (const m of s.maxHr) {
+    lines.push(
+      `- ${m.hr} bpm on ${m.date}${m.isRace ? " [RACE]" : ""} (${m.paceSPerKm ? fmtPace(m.paceSPerKm) : "?"}, avg ${m.avgHr ? Math.round(m.avgHr) : "?"}) ${m.name}`
+    );
+  }
+
+  lines.push("");
+  lines.push("BEST EFFORTS BY DISTANCE (whole-activity; races are the reliable maximal ones)");
+  for (const e of s.efforts) {
+    lines.push(
+      `- ${e.label}: ${e.distanceKm.toFixed(1)} km in ${fmtDuration(e.timeS)} (${fmtPace(e.paceSPerKm)}), avg HR ${e.avgHr ? Math.round(e.avgHr) : "?"}, max ${e.maxHr ?? "?"}, ${e.date}${e.isRace ? " [RACE]" : ""}`
+    );
+  }
+
+  lines.push("");
+  lines.push("HR vs PACE (avg HR at each easy/steady pace bucket)");
+  for (const b of s.hrPace) {
+    lines.push(`- ~${fmtPace(b.paceSPerKm)}: ${b.avgHr} bpm (n=${b.n})`);
+  }
+
+  if (s.decoupling.length > 0) {
+    lines.push("");
+    lines.push("AEROBIC DECOUPLING on long runs (Pa:Hr, 1st vs 2nd half; <5% = aerobically sound)");
+    for (const d of s.decoupling) {
+      lines.push(
+        `- ${d.date} ${d.distanceKm.toFixed(1)} km${d.paceSPerKm ? ` @${fmtPace(d.paceSPerKm)}` : ""}: HR ${d.firstHalfHr}→${d.secondHalfHr}, drift ${d.driftPct}%`
+      );
+    }
+  }
+
+  lines.push("");
+  lines.push("GOALS");
+  if (goals.length === 0) lines.push("- (none set)");
+  else for (const g of goals) lines.push(`- ${goalLine(g)}`);
+
+  if (extraContext.trim()) {
+    lines.push("");
+    lines.push("EXTRA CONTEXT FROM THE ATHLETE");
+    lines.push(extraContext.trim());
+  }
+
+  return lines.join("\n");
+}
+
+const ZONES_SYSTEM_PROMPT = `You are a running physiologist deriving an athlete's REAL training zones from their field data, NOT from an age formula.
+
+Rules:
+- Anchor everything in the data given: observed max HR (discard implausible optical spikes, e.g. a high peak during an easy run with a much lower average), the HR↔pace relationship, best race efforts, and aerobic decoupling.
+- Estimate LT1 (aerobic threshold) and LT2 (lactate/threshold) in BOTH heart rate and pace. LT2 pace/HR ~ recent 10k–HM race effort; LT1 ~ the top of easy running where decoupling stays low.
+- Estimate VO2max from the best race times (VDOT/Daniels style). Say if it disagrees with any device/lab number the athlete mentions.
+- Give 5 zones (Z1 recovery, Z2 base, Z3 tempo, Z4 threshold, Z5 VO2), each with a HR range and a pace range (s/km). Zones must be contiguous and consistent with the thresholds.
+- Set confidence honestly (low/medium/high) based on how much reliable data there is.
+- In summary (2-4 sentences), tie the zones to the athlete's goals and flag the single biggest gap (e.g. a target pace far from current threshold).
+- In missingInfo, list the specific things the athlete could provide to sharpen this (e.g. a recent flat 5k time trial, chest-strap HR, true resting HR). Empty if data is already strong.
+
+Report ONLY by calling the report_zones tool. Paces are seconds per km (smaller = faster); paceMinSPerKm is the faster bound.`;
+
+const NULLABLE_NUM = { type: ["number", "null"] } as const;
+const ZONES_TOOL: Anthropic.Tool = {
+  name: "report_zones",
+  description: "Return the derived training zones and threshold estimates.",
+  input_schema: {
+    type: "object",
+    properties: {
+      maxHr: NULLABLE_NUM,
+      restingHr: NULLABLE_NUM,
+      lt1Hr: NULLABLE_NUM,
+      lt2Hr: NULLABLE_NUM,
+      lt1PaceSPerKm: NULLABLE_NUM,
+      lt2PaceSPerKm: NULLABLE_NUM,
+      vo2maxEstimate: NULLABLE_NUM,
+      confidence: { type: "string", enum: ["low", "medium", "high"] },
+      summary: { type: "string" },
+      missingInfo: { type: "array", items: { type: "string" } },
+      zones: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            zone: { type: "integer", enum: [1, 2, 3, 4, 5] },
+            hrMin: NULLABLE_NUM,
+            hrMax: NULLABLE_NUM,
+            paceMinSPerKm: NULLABLE_NUM,
+            paceMaxSPerKm: NULLABLE_NUM,
+          },
+          required: ["zone", "hrMin", "hrMax", "paceMinSPerKm", "paceMaxSPerKm"],
+        },
+      },
+    },
+    required: [
+      "maxHr",
+      "restingHr",
+      "lt1Hr",
+      "lt2Hr",
+      "lt1PaceSPerKm",
+      "lt2PaceSPerKm",
+      "vo2maxEstimate",
+      "confidence",
+      "summary",
+      "missingInfo",
+      "zones",
+    ],
+  },
+};
+
+/** Derive zones via a forced tool call, returning the validated structured result. */
+export async function deriveZones(context: string): Promise<Omit<DerivedZones, "generatedAt">> {
+  const res = await getClient().messages.create({
+    model: COACH_MODEL,
+    max_tokens: 2000,
+    system: ZONES_SYSTEM_PROMPT,
+    tools: [ZONES_TOOL],
+    tool_choice: { type: "tool", name: "report_zones" },
+    messages: [{ role: "user", content: context }],
+  });
+  const block = res.content.find((b) => b.type === "tool_use");
+  if (!block || block.type !== "tool_use") {
+    throw new Error("zones tool call missing");
+  }
+  return block.input as Omit<DerivedZones, "generatedAt">;
 }

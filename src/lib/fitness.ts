@@ -58,9 +58,19 @@ function round3(n: number): number {
   return Math.round(n * 1000) / 1000;
 }
 
+// TSS is scaled so that one hour (SECONDS_PER_HOUR) at threshold (IF = 1.0)
+// scores 100 points.
+const SECONDS_PER_HOUR = 3600;
+const TSS_SCALE = 100;
+
+// Session-RPE fallback load = sRPE * minutes * factor. The factor is set so an
+// RPE 10 for 60 min ≈ 150 TSS, in line with a maximal one-hour effort.
+const SECONDS_PER_MINUTE = 60;
+const RPE_TSS_FACTOR = 0.25;
+
 /** Quadratic TSS from an intensity factor over a duration in seconds. */
 function tssFrom(movingS: number, intensity: number): number {
-  return (movingS / 3600) * intensity * intensity * 100;
+  return (movingS / SECONDS_PER_HOUR) * intensity * intensity * TSS_SCALE;
 }
 
 /**
@@ -118,7 +128,8 @@ export function computeLoad(
 
   // 4. RPE (subjective fallback; RPE 10 for 60 min ≈ 150 TSS).
   if (activity.rpe != null) {
-    return { tss: round1(activity.rpe * (time / 60) * 0.25), method: "rpe", intensityFactor: null };
+    const tss = round1(activity.rpe * (time / SECONDS_PER_MINUTE) * RPE_TSS_FACTOR);
+    return { tss, method: "rpe", intensityFactor: null };
   }
 
   return null;
@@ -159,15 +170,21 @@ export function computePmc(dailyLoads: { date: string; load: number }[]): PmcPoi
 
 export type FormStateKey = "fresh" | "neutral" | "productive" | "fatigued";
 
+// Form (TSB) band edges: above +5 is fresh/tapered, down to -10 is neutral,
+// down to -30 is the productive training zone, and below that is deep fatigue.
+const TSB_FRESH_ABOVE = 5;
+const TSB_NEUTRAL_FLOOR = -10;
+const TSB_PRODUCTIVE_FLOOR = -30;
+
 /**
  * Buckets a TSB value into a form state. Above +5 is fresh (tapered), the
  * -10..+5 band is neutral, -30..-10 is the productive training zone, and
  * anything below -30 is deep fatigue.
  */
 export function formState(tsb: number): { key: FormStateKey } {
-  if (tsb > 5) return { key: "fresh" };
-  if (tsb >= -10) return { key: "neutral" };
-  if (tsb >= -30) return { key: "productive" };
+  if (tsb > TSB_FRESH_ABOVE) return { key: "fresh" };
+  if (tsb >= TSB_NEUTRAL_FLOOR) return { key: "neutral" };
+  if (tsb >= TSB_PRODUCTIVE_FLOOR) return { key: "productive" };
   return { key: "fatigued" };
 }
 

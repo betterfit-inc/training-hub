@@ -42,6 +42,8 @@ DONE = committed, verify green · SKIPPED = intentionally not done (reason) · B
 
 | T2.10 | Remove drift/dead code + rename misleading key | DONE (partial) | _(this commit)_ | green | Removed: `ui/select` dead `&& ""` popper branch, `insights` redundant `activeDays` init, `ui/tooltip` dangling `data-[slot=kbd]` refs, `ui/dialog` `DialogFooter` dead Close button (`showCloseButton` was always false → never rendered). Renamed `review-flow` `keyApi.rpe` → `patchForm` (it stored the patch callback). **Skipped item:** `streams.ts` `?? new Array(n).fill(null)` — verified LIVE (indoor/manual activities lack distance/time streams; removing breaks types + activity-chart). Assessment's "unreachable" flag was wrong. |
 
+| T2.4 | Name magic numbers | DONE | _(this commit)_ | green | `fitness.ts`: `TSS_SCALE=100`, `SECONDS_PER_HOUR/MINUTE`, `RPE_TSS_FACTOR=0.25`, `TSB_FRESH_ABOVE/NEUTRAL_FLOOR/PRODUCTIVE_FLOOR`. `db.ts`: `DEFAULT_RETIREMENT_KM=700` (DDL interpolates it), `WRITE_CHUNK=200`. `races.ts`: named distance-band boundaries with shared edges. Values identical; engine tests unchanged and green. |
+
 **M1 seams checkpoint:** full `npm run verify` (incl. 6 Playwright e2e) re-run by the orchestrator after T1.1–T1.5 — green.
 
 **M0 acceptance met:** `npm run verify` is green on `build/overnight` (independently re-run by the orchestrator, exit 0, incl. 6 Playwright specs), runs against a local sqlite file only, and CI is wired to run it on every PR.

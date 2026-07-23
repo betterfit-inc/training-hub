@@ -45,6 +45,10 @@ if (process.env.NODE_ENV !== "production") globalThis.__trainingHubClient = clie
 // Migrations (idempotent, run lazily once per process before the first query)
 // ---------------------------------------------------------------------------
 
+// Default distance at which a shoe is flagged for retirement (km). Doubles as
+// the SQL column default below and the fallback the UI applies when unset.
+const DEFAULT_RETIREMENT_KM = 700;
+
 const SCHEMA: string[] = [
   `CREATE TABLE IF NOT EXISTS shoes (
     id INTEGER PRIMARY KEY,
@@ -53,7 +57,7 @@ const SCHEMA: string[] = [
     strava_gear_id TEXT UNIQUE,
     photo_path TEXT,
     initial_km REAL NOT NULL DEFAULT 0,
-    retirement_km REAL DEFAULT 700,
+    retirement_km REAL DEFAULT ${DEFAULT_RETIREMENT_KM},
     retired_at TEXT,
     created_at TEXT DEFAULT (datetime('now'))
   )`,
@@ -253,6 +257,9 @@ async function batchWrite(statements: InStatement[]) {
   await ensureMigrated();
   return client.batch(statements, "write");
 }
+
+// Max statements per batched write, to keep a single transaction bounded.
+const WRITE_CHUNK = 200;
 
 // ---------------------------------------------------------------------------
 // App meta
@@ -905,10 +912,9 @@ export async function upsertActivityLoads(
 ): Promise<void> {
   if (rows.length === 0) return;
   const now = new Date().toISOString();
-  const CHUNK = 200;
-  for (let i = 0; i < rows.length; i += CHUNK) {
+  for (let i = 0; i < rows.length; i += WRITE_CHUNK) {
     await batchWrite(
-      rows.slice(i, i + CHUNK).map((r) => ({
+      rows.slice(i, i + WRITE_CHUNK).map((r) => ({
         sql: UPSERT_AUTO_LOAD_SQL,
         args: [r.activityId, r.tss, r.method, r.intensityFactor, now],
       }))

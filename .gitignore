@@ -42,6 +42,7 @@ yarn-error.log*
 /playwright-report/
 /playwright/.cache/
 /data/e2e.db*
+/e2e/.auth/
 
 # scratch space for validation scripts and sub-agent briefs (never committed)
 /scratchpad/

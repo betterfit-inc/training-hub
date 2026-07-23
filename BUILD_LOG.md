@@ -113,6 +113,17 @@ Two cited Markdown docs at the repo root (not part of the Phase 3 code changes):
 
 ---
 
+---
+
+## Continuation (post-review, same branch)
+
+Work done after the initial PR, on the user's direction:
+
+| Item | Status | Commit | Notes |
+|---|---|---|---|
+| Prod loads recompute (T3.3) | DONE | (ops, no code) | Ran `backfill:load` against prod Turso with the T3.3-corrected logic (guarded override). `activity_load` methods: power **40→2**, hr **857→895**, pace 333 unchanged — 38 of 40 "power" rides were on Strava's *estimated* wattage and moved to HR-TSS (e.g. a 100k ride 608.8→205.6). Verified persisted; Jundiaí HM unchanged at 152.7. Caveat: re-run after the PR deploys if thresholds are saved on the old prod code meanwhile. |
+| Auth page-gating | DONE (SIGN-OFF) | _(this commit)_ | Extends T1.6 to gate READ pages too. `src/proxy.ts` (Next 16 renamed `middleware`→`proxy`, Node runtime by default) redirects unauthenticated visits to `/login?next=…`; reuses `verifySessionToken` (real HMAC verify, not presence-only — a wrong-secret cookie is rejected). Allowlist: `/login`, `/api/strava/callback`, Next internals. Graceful degradation preserved (unconfigured secrets = allow-all). Playwright gains an auth-setup project (storageState) so read specs run authenticated; the auth-flow specs run unauthenticated. 10 e2e green. The proxy redirect is an optimistic convenience; the real authorization remains `requireAuth()` on the 20 actions. |
+
 ### Discovered during the build (flagged, not in the backlog)
 - **libSQL `Row` objects reach client components** — `next dev` logs "Only plain objects can be passed to Client Components…" for gear/split rows. Pre-existing, non-blocking. A full fix means mapping rows to plain objects at the `db.ts` seam (T3.12 did this for `is_race`; the rest is a larger pass).
 - **Stale dev server** — a ~32h-old training-hub `next dev` holding Next's single-instance lock on :3001 was terminated so the e2e webServer could run; the unrelated `betterfit` dev server (:3000) was left alone.

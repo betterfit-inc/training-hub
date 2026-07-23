@@ -4,6 +4,10 @@ import { defineConfig, devices } from "@playwright/test";
 const PORT = 3100;
 const BASE_URL = `http://localhost:${PORT}`;
 
+// Saved owner session from the auth.setup project. The read specs reuse it so
+// they pass the now-active page gate; kept in sync with e2e/auth.setup.ts.
+const STORAGE_STATE = "e2e/.auth/owner.json";
+
 // Isolated SQLite file for E2E: lives under data/ (gitignored) but is a distinct
 // file from the dev database (data/app.db) and is never a Turso database. The app
 // reads it via the DATABASE_URL override in src/lib/db.ts. The seed step and the
@@ -33,7 +37,24 @@ export default defineConfig({
     baseURL: BASE_URL,
     trace: "on-first-retry",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    // Logs in once and writes STORAGE_STATE; the read project depends on it.
+    { name: "setup", testMatch: /auth\.setup\.ts/ },
+    // The seeded read flows, run with the saved owner session so the page gate
+    // (src/proxy.ts) lets them through. Excludes the setup and the auth spec.
+    {
+      name: "chromium",
+      testIgnore: [/auth\.setup\.ts/, /auth\.spec\.ts/],
+      use: { ...devices["Desktop Chrome"], storageState: STORAGE_STATE },
+      dependencies: ["setup"],
+    },
+    // The login/logout flow itself must run UNAUTHENTICATED (no storageState).
+    {
+      name: "chromium-guest",
+      testMatch: /auth\.spec\.ts/,
+      use: { ...devices["Desktop Chrome"] },
+    },
+  ],
   webServer: {
     // Reset + seed the isolated DB, then boot `next dev` (fast boot; a build+start
     // is unnecessary for these read flows). Seeding runs before the server opens

@@ -50,6 +50,11 @@ export default defineConfig({
       STRAVA_CLIENT_SECRET: "",
       TURSO_DATABASE_URL: "",
       TURSO_AUTH_TOKEN: "",
+      // T1.6: configure the auth boundary so the login flow can be exercised.
+      // Reads stay OPEN (only mutating actions are gated), so the existing
+      // read-only specs need no login; auth.spec.ts covers login/logout.
+      AUTH_PASSWORD: "e2e-owner-password",
+      AUTH_SECRET: "e2e-signing-secret-please-do-not-reuse",
     },
   },
 });

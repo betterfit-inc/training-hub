@@ -4,6 +4,8 @@ import "./globals.css";
 import { I18nProvider } from "@/components/i18n-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
+// Speed Insights only (RUM). Usage/Web Analytics stays deferred behind the track() seam in src/lib/telemetry.ts.
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Header } from "@/components/header";
 import { countPending } from "@/lib/db";
 import { getLang } from "@/lib/lang";
@@ -73,6 +75,7 @@ export default async function RootLayout({
             <Toaster />
           </I18nProvider>
         </ThemeProvider>
+        <SpeedInsights />
       </body>
     </html>
   );

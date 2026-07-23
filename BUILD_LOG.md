@@ -33,6 +33,8 @@ DONE = committed, verify green · SKIPPED = intentionally not done (reason) · B
 
 | T1.4 | Move personal/baseline data out of `db.ts` | DONE | _(this commit)_ | green | New `src/lib/baseline.ts` holds `BASELINE_SHOES`/`BASELINE_BIKES`/`THRESHOLD_DEFAULTS` (the sole owner's fixtures); `db.ts` imports them. Also deduped the threshold defaults so the `athlete_thresholds` seed INSERT sources from `THRESHOLD_DEFAULTS` instead of duplicated inline literals (G5.8). Seeded rows byte-identical; migration still auto-seeds on first run (behavior-preserving). |
 
+| T1.3 | Speed Insights | DONE | _(this commit)_ | green | Added `@vercel/speed-insights` (runtime dep, first-party) and rendered `<SpeedInsights />` in the root layout. Web Analytics stays deferred behind the telemetry `track()` seam (documented, not wired). No-op off-Vercel so e2e unaffected. |
+
 **M0 acceptance met:** `npm run verify` is green on `build/overnight` (independently re-run by the orchestrator, exit 0, incl. 6 Playwright specs), runs against a local sqlite file only, and CI is wired to run it on every PR.
 
 ### Discovered during M0 (not in the backlog — flag for later)

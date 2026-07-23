@@ -13,7 +13,8 @@
     "test": "vitest run",
     "test:unit": "vitest run",
     "deadcode": "knip",
-    "cycles": "madge --circular --extensions ts,tsx src",
+    "cycles": "madge --circular --ts-config tsconfig.json --extensions ts,tsx src",
+    "verify": "npm run typecheck && npm run lint && npm run format:check && npm run test:unit && npm run deadcode && npm run cycles",
     "seed": "tsx scripts/seed.ts",
     "seed:clear": "tsx scripts/seed.ts --clear",
     "backfill:load": "tsx scripts/backfill-load.ts"

@@ -1,15 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
-  CheckCircle2Icon,
   CheckIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   FootprintsIcon,
-  InboxIcon,
   Loader2Icon,
   TriangleAlertIcon,
 } from "lucide-react";
@@ -20,63 +18,19 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
-import { EmptyState } from "@/components/empty-state";
 import { FeelingControl, RpeControl } from "@/components/journal-controls";
 import { SportIcon } from "@/components/sport-icon";
 import { useI18n } from "@/components/i18n-provider";
-import { SplitsEditor, newRowKey, rowsToSplits, type SplitRow } from "@/components/splits-editor";
+import { SplitsEditor, rowsToSplits } from "@/components/splits-editor";
+import { initForm, type FormState, type Summary } from "@/components/review-flow-form";
+import { Stat, ReviewSummaryScreen, useReviewKeyboard } from "@/components/review-flow-parts";
 import { confirmActivityAction } from "@/lib/actions";
 import { fmtDate, fmtDuration, fmtElev, fmtHr, fmtKm, fmtPace, fmtTime } from "@/lib/format";
-import { fill, fillStr, splitErrorText } from "@/lib/i18n";
+import { fill, splitErrorText } from "@/lib/i18n";
 import { isRunSport, validateSplits } from "@/lib/validate";
 import { BikeSelect } from "@/components/bike-select";
 import { isRideSport } from "@/lib/cycling";
-import type { ActivityWithSplits, BikeOption, Feeling, ShoeOption } from "@/lib/types";
-
-interface FormState {
-  rows: SplitRow[];
-  bikeId: number | null;
-  rpe: number | null;
-  feeling: Feeling | null;
-  workoutNotes: string;
-  healthNotes: string;
-}
-
-interface Summary {
-  count: number;
-  totalKm: number;
-  perShoe: Record<string, number>;
-}
-
-function initForm(activity: ActivityWithSplits): FormState {
-  const rows: SplitRow[] = activity.splits.map((s) => ({
-    key: newRowKey(),
-    shoeId: s.shoe_id,
-    km: s.km ? String(s.km) : "",
-  }));
-  if (rows.length === 0 && isRunSport(activity.sport_type) && (activity.distance_km ?? 0) > 0) {
-    rows.push({ key: newRowKey(), shoeId: null, km: String(activity.distance_km) });
-  }
-  return {
-    rows,
-    bikeId: activity.bike_id,
-    rpe: activity.rpe,
-    feeling: activity.feeling,
-    workoutNotes: activity.workout_notes ?? "",
-    healthNotes: activity.health_notes ?? "",
-  };
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0">
-      <div className="text-[11px] font-medium tracking-wider text-muted-foreground uppercase">
-        {label}
-      </div>
-      <div className="mt-0.5 truncate font-display text-lg font-semibold">{value}</div>
-    </div>
-  );
-}
+import type { ActivityWithSplits, BikeOption, ShoeOption } from "@/lib/types";
 
 export function ReviewFlow({
   items: serverItems,
@@ -164,48 +118,7 @@ export function ReviewFlow({
     });
   }
 
-  // Keep the handlers fresh for the global keyboard listener.
-  const keyApi = useRef({ confirmCurrent, goto, index, patchForm });
-  useEffect(() => {
-    keyApi.current = { confirmCurrent, goto, index, patchForm };
-  });
-
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      const api = keyApi.current;
-      const target = event.target as HTMLElement | null;
-      const typing = !!target?.closest(
-        "input, textarea, select, [contenteditable], [role='combobox'], [role='listbox'], [role='option']"
-      );
-
-      if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-        event.preventDefault();
-        api.confirmCurrent();
-        return;
-      }
-      if (typing) return;
-
-      if (event.key === "Enter") {
-        // Let focused buttons and links keep their native Enter behavior.
-        if (target?.closest("button, a")) return;
-        event.preventDefault();
-        api.confirmCurrent();
-      } else if (event.key === "ArrowRight") {
-        api.goto(api.index + 1);
-      } else if (event.key === "ArrowLeft") {
-        api.goto(api.index - 1);
-      } else if (event.key === "e" || event.key === "E") {
-        event.preventDefault();
-        kmInputRef.current?.focus();
-        kmInputRef.current?.select();
-      } else if (/^[0-9]$/.test(event.key)) {
-        const value = event.key === "0" ? 10 : Number(event.key);
-        api.patchForm({ rpe: value });
-      }
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  useReviewKeyboard({ confirmCurrent, goto, index, patchForm, kmInputRef });
 
   // ------------------------------------------------------------------
   // Empty queue states
@@ -213,63 +126,14 @@ export function ReviewFlow({
   if (!current || !form) {
     const freshArrivals = serverItems.filter((a) => !handledIds.has(a.id));
     return (
-      <div className="animate-in fade-in zoom-in-95 duration-500">
-        {summary.count > 0 ? (
-          <div className="flex flex-col items-center rounded-xl border bg-card px-6 py-14 text-center">
-            <CheckCircle2Icon className="size-10 text-positive" aria-hidden />
-            <h2 className="mt-4 font-display text-3xl font-bold uppercase">{t.review.caughtUp}</h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              {fillStr(t.review.confirmedSummary, {
-                n: summary.count,
-                noun: summary.count === 1 ? t.words.activity : t.words.activities,
-              })}
-              {summary.totalKm > 0 ? (
-                <> {fillStr(t.review.covering, { km: fmtKm(summary.totalKm) })}</>
-              ) : null}
-              .
-            </p>
-            {Object.keys(summary.perShoe).length > 0 ? (
-              <dl className="mt-6 w-full max-w-sm space-y-1.5 text-sm">
-                {Object.entries(summary.perShoe)
-                  .sort((a, b) => b[1] - a[1])
-                  .map(([name, km]) => (
-                    <div
-                      key={name}
-                      className="flex items-baseline justify-between gap-4 border-b border-dashed border-border/70 pb-1.5"
-                    >
-                      <dt className="truncate text-muted-foreground">{name}</dt>
-                      <dd className="font-mono font-medium tabular-nums text-positive">
-                        +{fmtKm(km)}
-                      </dd>
-                    </div>
-                  ))}
-              </dl>
-            ) : null}
-            <div className="mt-8 flex items-center gap-2">
-              <Button asChild>
-                <Link href="/">{t.review.backToLog}</Link>
-              </Button>
-              {freshArrivals.length > 0 ? (
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setQueue(freshArrivals);
-                    setIndex(0);
-                  }}
-                >
-                  {fillStr(t.review.reviewMore, { n: freshArrivals.length })}
-                </Button>
-              ) : null}
-            </div>
-          </div>
-        ) : (
-          <EmptyState icon={InboxIcon} title={t.review.caughtUp} description={t.review.emptyBody}>
-            <Button asChild variant="outline">
-              <Link href="/">{t.review.backToLog}</Link>
-            </Button>
-          </EmptyState>
-        )}
-      </div>
+      <ReviewSummaryScreen
+        summary={summary}
+        freshArrivalsCount={freshArrivals.length}
+        onReviewMore={() => {
+          setQueue(freshArrivals);
+          setIndex(0);
+        }}
+      />
     );
   }
 

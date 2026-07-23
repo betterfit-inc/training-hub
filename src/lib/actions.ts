@@ -1,12 +1,11 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { NONE } from "./constants";
-import { dictionaries, splitErrorText, isLang, type Dict } from "./i18n";
-import { LANG_COOKIE, getLang } from "./lang";
+import { splitErrorText, isLang } from "./i18n";
+import { LANG_COOKIE } from "./lang";
 import { storePhoto, deletePhoto, InvalidImageError } from "./storage";
 import {
   addActivityChatMessage,
@@ -22,7 +21,6 @@ import {
   getShoe,
   listActivitiesSince,
   listActivityChat,
-  listActivityLoadsForPmc,
   recomputeActivityLoad,
   recomputeAllLoads,
   replaceActivitySplits,
@@ -40,7 +38,6 @@ import {
   updateShoe,
   confirmActivity,
   type BikeFields,
-  type JournalFields,
   type ShoeFields,
 } from "./db";
 import {
@@ -51,10 +48,9 @@ import {
   runWeeklyDigest,
   summarizeStreams,
   type CoachLoad,
-  type CoachPmc,
   type CoachStreamSummary,
 } from "./coach";
-import { computeLoad, computePmc, dailyLoadSeries, type PmcPoint } from "./fitness";
+import { computeLoad } from "./fitness";
 import {
   ensureActivityStreams,
   stravaConfigured,
@@ -66,15 +62,16 @@ import { parseId, validateSplits } from "./validate";
 import { fail, type ActionResult } from "./action-result";
 import { logger } from "./telemetry";
 import { authConfigured, createSession, destroySession, requireAuth, verifyPassword } from "./auth";
+import {
+  buildPmc,
+  dict,
+  inRange,
+  normalizeJournal,
+  normalizeSplits,
+  pmcPoint,
+  refreshAll,
+} from "./action-helpers";
 import type { Feeling, SplitInput } from "./types";
-
-async function dict(): Promise<Dict> {
-  return dictionaries[await getLang()];
-}
-
-function refreshAll() {
-  revalidatePath("/", "layout");
-}
 
 // ---------------------------------------------------------------------------
 // Language
@@ -136,37 +133,6 @@ export async function syncNowAction(): Promise<SyncActionResult> {
 // ---------------------------------------------------------------------------
 // Review + journal
 // ---------------------------------------------------------------------------
-
-const FEELINGS: Feeling[] = ["great", "good", "ok", "rough", "terrible"];
-
-function normalizeJournal(
-  input: {
-    rpe: number | null;
-    feeling: Feeling | null;
-    workoutNotes: string;
-    healthNotes: string;
-  },
-  t: Dict
-): JournalFields | { error: string } {
-  const rpe = input.rpe == null ? null : Math.round(input.rpe);
-  if (rpe != null && (rpe < 1 || rpe > 10)) return { error: t.errors.invalidRpe };
-  if (input.feeling != null && !FEELINGS.includes(input.feeling)) {
-    return { error: t.errors.invalidFeeling };
-  }
-  return {
-    rpe,
-    feeling: input.feeling,
-    workout_notes: input.workoutNotes.trim() || null,
-    health_notes: input.healthNotes.trim() || null,
-  };
-}
-
-function normalizeSplits(splits: SplitInput[]): SplitInput[] {
-  return splits.map((s) => ({
-    shoe_id: s.shoe_id,
-    km: Math.round((Number(s.km) || 0) * 100) / 100,
-  }));
-}
 
 export async function confirmActivityAction(input: {
   activityId: number;
@@ -295,10 +261,6 @@ export interface ThresholdsInput {
   ftpW: number;
   restingHrEstimated: boolean;
   ftpProvisional: boolean;
-}
-
-function inRange(value: number, lo: number, hi: number): boolean {
-  return Number.isFinite(value) && value >= lo && value <= hi;
 }
 
 export async function saveThresholdsAction(input: ThresholdsInput): Promise<ActionResult> {
@@ -616,19 +578,6 @@ export async function createManualActivityAction(input: {
 export type CoachMessageResult = { ok: true; reply: string } | { ok: false; error: string };
 export type WeeklyDigestResult =
   { ok: true; text: string; generatedAt: string } | { ok: false; error: string };
-
-/**
- * Whole-history Performance Management Chart, gap-filled to today. Mirrors the
- * fitness page: sum TSS per local calendar day, then run the EWMA. Empty when no
- * confirmed activity has a training load yet.
- */
-async function buildPmc(): Promise<PmcPoint[]> {
-  return computePmc(dailyLoadSeries(await listActivityLoadsForPmc()));
-}
-
-function pmcPoint(point: PmcPoint | null | undefined): CoachPmc | null {
-  return point ? { ctl: point.ctl, atl: point.atl, tsb: point.tsb } : null;
-}
 
 export async function sendCoachMessageAction(input: {
   activityId: number;

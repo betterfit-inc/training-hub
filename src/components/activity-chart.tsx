@@ -3,68 +3,31 @@
 import { useMemo, useRef, useState } from "react";
 import { useI18n } from "@/components/i18n-provider";
 import type { ActivityStreams } from "@/lib/streams";
-import { fmtDuration, fmtHr, fmtKm, fmtPace, fmtPaceShort } from "@/lib/format";
-import { fmtCadence, fmtPower } from "@/lib/cycling";
-
-type SeriesKey = "heartRate" | "pace" | "power" | "cadence" | "elevation";
-type XMode = "distance" | "time";
-
-interface SeriesDef {
-  key: SeriesKey;
-  data: (number | null)[]; // guaranteed non-null series (available ones only)
-  color: string; // fixed CSS-var order: primary, chart-2..chart-5
-  label: string;
-  unit: string;
-  invert: boolean; // pace: faster (smaller) sits higher
-  area: boolean; // elevation renders as a filled area
-  fmt: (v: number) => string;
-  tick: (v: number) => string;
-}
-
-type SeriesCandidate = Omit<SeriesDef, "data"> & { data: (number | null)[] | null };
-
-// viewBox geometry (unitless; the SVG scales to its container width)
-const VBW = 760;
-const PAD_L = 48;
-const PAD_R = 14;
-const PLOT_W = VBW - PAD_L - PAD_R;
-const TOP = 8;
-const PANEL_H = 68;
-const GAP = 16;
-const AXIS_H = 26;
-
-const round = (v: number) => String(Math.round(v));
-
-/** Compact clock for the time axis: h:mm past an hour, else m:ss. */
-function fmtClock(s: number): string {
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = Math.round(s % 60);
-  if (h > 0) return `${h}:${String(m).padStart(2, "0")}`;
-  return `${m}:${String(sec).padStart(2, "0")}`;
-}
-
-function extent(data: (number | null)[]): [number, number] | null {
-  let min = Infinity;
-  let max = -Infinity;
-  for (const v of data) {
-    if (v == null) continue;
-    if (v < min) min = v;
-    if (v > max) max = v;
-  }
-  if (!Number.isFinite(min)) return null;
-  if (min === max) return [min - 1, max + 1];
-  const pad = (max - min) * 0.08;
-  // Don't pad below zero for naturally non-negative series (power, cadence).
-  const lo = min >= 0 ? Math.max(0, min - pad) : min - pad;
-  return [lo, max + pad];
-}
+import { fmtDuration, fmtKm } from "@/lib/format";
+import {
+  AXIS_H,
+  GAP,
+  PAD_L,
+  PAD_R,
+  PANEL_H,
+  PLOT_W,
+  TOP,
+  VBW,
+  buildSeries,
+  extent,
+  fmtClock,
+  type SeriesDef,
+  type SeriesKey,
+  type XMode,
+} from "@/components/activity-chart-series";
 
 export function ActivityChart({
+  activityId,
   streams,
   isRun,
   isRide,
 }: {
+  activityId: number;
   streams: ActivityStreams;
   isRun: boolean;
   isRide: boolean;
@@ -74,66 +37,10 @@ export function ActivityChart({
 
   // Every candidate series with its fixed color slot; only the ones whose
   // stream is present become togglable.
-  const allSeries = useMemo<SeriesDef[]>(() => {
-    const defs: SeriesCandidate[] = [
-      {
-        key: "heartRate",
-        data: streams.heartrate,
-        color: "var(--primary)",
-        label: t.chart.heartRate,
-        unit: "bpm",
-        invert: false,
-        area: false,
-        fmt: (v) => fmtHr(v),
-        tick: round,
-      },
-      {
-        key: "pace",
-        data: streams.paceSPerKm,
-        color: "var(--chart-2)",
-        label: t.chart.pace,
-        unit: "min/km",
-        invert: true,
-        area: false,
-        fmt: (v) => fmtPace(v),
-        tick: fmtPaceShort,
-      },
-      {
-        key: "power",
-        data: streams.watts,
-        color: "var(--chart-3)",
-        label: t.chart.power,
-        unit: "W",
-        invert: false,
-        area: false,
-        fmt: (v) => fmtPower(v),
-        tick: round,
-      },
-      {
-        key: "cadence",
-        data: streams.cadence,
-        color: "var(--chart-4)",
-        label: t.chart.cadence,
-        unit: isRide ? "rpm" : "spm",
-        invert: false,
-        area: false,
-        fmt: (v) => fmtCadence(v),
-        tick: round,
-      },
-      {
-        key: "elevation",
-        data: streams.altitudeM,
-        color: "var(--chart-5)",
-        label: t.chart.elevation,
-        unit: "m",
-        invert: false,
-        area: true,
-        fmt: (v) => `${round(v)} m`,
-        tick: round,
-      },
-    ];
-    return defs.filter((d): d is SeriesDef => d.data != null);
-  }, [streams, t, isRide]);
+  const allSeries = useMemo<SeriesDef[]>(
+    () => buildSeries(streams, t, isRide),
+    [streams, t, isRide]
+  );
 
   const available = useMemo(() => allSeries.map((s) => s.key), [allSeries]);
   const hasElevation = available.includes("elevation");
@@ -148,12 +55,28 @@ export function ActivityChart({
     return new Set(wanted.filter((k) => available.includes(k)));
   }, [isRide, isRun, hasElevation, available]);
 
-  const [active, setActive] = useState<Set<SeriesKey>>(defaultActive);
-  const [xMode, setXMode] = useState<XMode>("distance");
-  const [hover, setHover] = useState<number | null>(null);
-
   const timeAvailable = streams.timeS.some((v) => v != null);
   const distAvailable = streams.distanceKm.some((v) => v != null);
+  // Prefer the distance axis, but an activity with no usable distance stream
+  // (treadmill / pool) has only time to plot against — defaulting to distance
+  // there leaves an empty x-axis and a blank chart.
+  const defaultXMode: XMode = distAvailable ? "distance" : "time";
+
+  const [active, setActive] = useState<Set<SeriesKey>>(defaultActive);
+  const [xMode, setXMode] = useState<XMode>(defaultXMode);
+  const [hover, setHover] = useState<number | null>(null);
+
+  // Client-side navigation between two /activity/[id] pages can reuse this same
+  // component instance, so per-activity view state would otherwise persist and
+  // show the previous activity's default series. Resync during render when the
+  // activity changes (React's "adjust state on prop change" pattern, no effect).
+  const [prevActivityId, setPrevActivityId] = useState(activityId);
+  if (activityId !== prevActivityId) {
+    setPrevActivityId(activityId);
+    setActive(defaultActive);
+    setXMode(defaultXMode);
+    setHover(null);
+  }
   const xs = xMode === "time" && timeAvailable ? streams.timeS : streams.distanceKm;
   const xExtent = useMemo(() => {
     let min = Infinity;
@@ -228,7 +151,10 @@ export function ActivityChart({
   const xTicks = useMemo(() => {
     if (!xExtent) return [];
     const T = 5;
-    return Array.from({ length: T + 1 }, (_, k) => xExtent[0] + ((xExtent[1] - xExtent[0]) * k) / T);
+    return Array.from(
+      { length: T + 1 },
+      (_, k) => xExtent[0] + ((xExtent[1] - xExtent[0]) * k) / T
+    );
   }, [xExtent]);
 
   return (
@@ -341,7 +267,8 @@ export function ActivityChart({
                 const flush = () => {
                   if (run.length > 1) {
                     areaPath += `M${xPx(run[0][0]).toFixed(1)},${bottom.toFixed(1)} `;
-                    for (const [x, y] of run) areaPath += `L${xPx(x).toFixed(1)},${yPx(y).toFixed(1)} `;
+                    for (const [x, y] of run)
+                      areaPath += `L${xPx(x).toFixed(1)},${yPx(y).toFixed(1)} `;
                     areaPath += `L${xPx(run[run.length - 1][0]).toFixed(1)},${bottom.toFixed(1)} Z `;
                   }
                   run = [];
@@ -427,7 +354,14 @@ export function ActivityChart({
                   ))}
 
                   {hoverVal != null && hoverX != null ? (
-                    <circle cx={hoverX} cy={yPx(hoverVal)} r={3.5} fill={s.color} stroke="var(--card)" strokeWidth={1.5} />
+                    <circle
+                      cx={hoverX}
+                      cy={yPx(hoverVal)}
+                      r={3.5}
+                      fill={s.color}
+                      stroke="var(--card)"
+                      strokeWidth={1.5}
+                    />
                   ) : null}
                 </g>
               );
@@ -439,7 +373,15 @@ export function ActivityChart({
               const axisY = TOP + shown.length * PANEL_H + Math.max(0, shown.length - 1) * GAP;
               return (
                 <g key={i}>
-                  <line x1={x} y1={TOP} x2={x} y2={axisY} stroke="var(--border)" strokeWidth={1} opacity={0.25} />
+                  <line
+                    x1={x}
+                    y1={TOP}
+                    x2={x}
+                    y2={axisY}
+                    stroke="var(--border)"
+                    strokeWidth={1}
+                    opacity={0.25}
+                  />
                   <text
                     x={x}
                     y={axisY + 15}
@@ -478,16 +420,18 @@ export function ActivityChart({
                 transform: `translateX(${hoverX > VBW / 2 ? "-100%" : "0"}) translateX(${hoverX > VBW / 2 ? "-8px" : "8px"})`,
               }}
             >
-              <div className="mb-1 font-mono font-medium text-foreground">
-                {xLabel(xs[hover]!)}
-              </div>
+              <div className="mb-1 font-mono font-medium text-foreground">{xLabel(xs[hover]!)}</div>
               <div className="space-y-0.5">
                 {shown.map((s) => {
                   const v = s.data[hover];
                   return (
                     <div key={s.key} className="flex items-center justify-between gap-3">
                       <span className="flex items-center gap-1.5 text-muted-foreground">
-                        <span className="size-2 rounded-full" style={{ backgroundColor: s.color }} aria-hidden />
+                        <span
+                          className="size-2 rounded-full"
+                          style={{ backgroundColor: s.color }}
+                          aria-hidden
+                        />
                         {s.label}
                       </span>
                       <span className="font-mono tabular-nums" style={{ color: s.color }}>

@@ -37,6 +37,13 @@ yarn-error.log*
 # local data: SQLite database and uploaded shoe photos
 /data/
 
+# playwright e2e
+/test-results/
+/playwright-report/
+/playwright/.cache/
+/data/e2e.db*
+/e2e/.auth/
+
 # scratch space for validation scripts and sub-agent briefs (never committed)
 /scratchpad/
 

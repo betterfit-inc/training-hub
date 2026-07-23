@@ -3,9 +3,9 @@
 // what the activity chart consumes.
 
 export interface ActivityStreams {
-  n: number;                          // <= 400
-  distanceKm: (number | null)[];      // length n
-  timeS: (number | null)[];           // length n
+  n: number; // <= 400
+  distanceKm: (number | null)[]; // length n
+  timeS: (number | null)[]; // length n
   heartrate: (number | null)[] | null;
   paceSPerKm: (number | null)[] | null; // from velocity; null where v<=0
   watts: (number | null)[] | null;
@@ -22,9 +22,7 @@ const MAX_POINTS = 400;
  * Every source array is indexed by the same [0,1] fraction, so streams of
  * differing lengths stay aligned. First and last points are always kept.
  */
-export function normalizeStreams(
-  raw: Record<string, { data: number[] }>
-): ActivityStreams | null {
+export function normalizeStreams(raw: Record<string, { data: number[] }>): ActivityStreams | null {
   const get = (key: string): number[] | undefined => {
     const data = raw?.[key]?.data;
     return Array.isArray(data) && data.length > 0 ? data : undefined;
@@ -43,8 +41,7 @@ export function normalizeStreams(
   );
   if (present.length === 0) return null;
 
-  const baseLen =
-    distance?.length ?? time?.length ?? Math.max(...present.map((a) => a.length));
+  const baseLen = distance?.length ?? time?.length ?? Math.max(...present.map((a) => a.length));
   const n = Math.min(baseLen, MAX_POINTS);
 
   const fractionAt = (i: number): number => (n <= 1 ? 0 : i / (n - 1));

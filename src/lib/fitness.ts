@@ -2,6 +2,7 @@
 // Management Chart (CTL/ATL/TSB) and Friel training zones. No DB imports — the
 // data layer feeds these functions and persists their output.
 import { isRideSport, rideMetrics } from "./cycling";
+import { eachDay, localDateInputValue } from "./format";
 import { isRunSport } from "./validate";
 
 export interface AthleteThresholds {
@@ -58,9 +59,19 @@ function round3(n: number): number {
   return Math.round(n * 1000) / 1000;
 }
 
+// TSS is scaled so that one hour (SECONDS_PER_HOUR) at threshold (IF = 1.0)
+// scores 100 points.
+const SECONDS_PER_HOUR = 3600;
+const TSS_SCALE = 100;
+
+// Session-RPE fallback load = sRPE * minutes * factor. The factor is set so an
+// RPE 10 for 60 min ≈ 150 TSS, in line with a maximal one-hour effort.
+const SECONDS_PER_MINUTE = 60;
+const RPE_TSS_FACTOR = 0.25;
+
 /** Quadratic TSS from an intensity factor over a duration in seconds. */
 function tssFrom(movingS: number, intensity: number): number {
-  return (movingS / 3600) * intensity * intensity * 100;
+  return (movingS / SECONDS_PER_HOUR) * intensity * intensity * TSS_SCALE;
 }
 
 /**
@@ -76,13 +87,19 @@ export function computeLoad(
   const time = activity.moving_time_s ?? 0;
   if (time <= 0) return null;
 
-  // 1. Power (rides with a normalized/average wattage and an FTP).
+  // 1. Power (rides with a real power meter, a normalized/average wattage and
+  // an FTP). Strava's *estimated* wattage (device_watts false/absent) is not
+  // trustworthy enough for a power TSS, so it falls through to the HR method.
   if (!opts.ignorePower && isRideSport(activity.sport_type) && thresholds.ftpW > 0) {
     const metrics = rideMetrics({ sport_type: activity.sport_type, raw_json: activity.raw_json });
     const power = metrics.normalizedPower ?? metrics.avgPower;
-    if (power != null && power > 0) {
+    if (metrics.hasRealPower && power != null && power > 0) {
       const intensity = clamp(power / thresholds.ftpW, 0, IF_CLAMP_POWER);
-      return { tss: round1(tssFrom(time, intensity)), method: "power", intensityFactor: round3(intensity) };
+      return {
+        tss: round1(tssFrom(time, intensity)),
+        method: "power",
+        intensityFactor: round3(intensity),
+      };
     }
   }
 
@@ -90,7 +107,11 @@ export function computeLoad(
   const pace = activity.avg_pace_s_per_km ?? 0;
   if (isRunSport(activity.sport_type) && pace > 0 && thresholds.thresholdPaceSPerKm > 0) {
     const intensity = clamp(thresholds.thresholdPaceSPerKm / pace, 0, IF_CLAMP_PACE);
-    return { tss: round1(tssFrom(time, intensity)), method: "pace", intensityFactor: round3(intensity) };
+    return {
+      tss: round1(tssFrom(time, intensity)),
+      method: "pace",
+      intensityFactor: round3(intensity),
+    };
   }
 
   // 3. Heart rate (hrTSS, works for any sport with an average HR).
@@ -101,12 +122,17 @@ export function computeLoad(
       0,
       IF_CLAMP_HR
     );
-    return { tss: round1(tssFrom(time, intensity)), method: "hr", intensityFactor: round3(intensity) };
+    return {
+      tss: round1(tssFrom(time, intensity)),
+      method: "hr",
+      intensityFactor: round3(intensity),
+    };
   }
 
   // 4. RPE (subjective fallback; RPE 10 for 60 min ≈ 150 TSS).
   if (activity.rpe != null) {
-    return { tss: round1(activity.rpe * (time / 60) * 0.25), method: "rpe", intensityFactor: null };
+    const tss = round1(activity.rpe * (time / SECONDS_PER_MINUTE) * RPE_TSS_FACTOR);
+    return { tss, method: "rpe", intensityFactor: null };
   }
 
   return null;
@@ -118,6 +144,26 @@ export interface PmcPoint {
   ctl: number;
   atl: number;
   tsb: number;
+}
+
+/**
+ * Bucket persisted training loads into a gap-filled ascending daily series
+ * (local calendar days) spanning the earliest load day through today, ready to
+ * feed straight into computePmc. Empty when there are no loads.
+ */
+export function dailyLoadSeries(
+  loads: { started_at: string; tss: number }[]
+): { date: string; load: number }[] {
+  const byDay = new Map<string, number>();
+  for (const load of loads) {
+    const key = localDateInputValue(new Date(load.started_at));
+    byDay.set(key, (byDay.get(key) ?? 0) + load.tss);
+  }
+  if (byDay.size === 0) return [];
+  const dayKeys = [...byDay.keys()].sort();
+  const today = localDateInputValue(new Date());
+  const lastDay = dayKeys[dayKeys.length - 1] > today ? dayKeys[dayKeys.length - 1] : today;
+  return eachDay(dayKeys[0], lastDay).map((date) => ({ date, load: byDay.get(date) ?? 0 }));
 }
 
 // Exponentially-weighted decay constants: fitness over ~42 days, fatigue ~7.
@@ -147,15 +193,21 @@ export function computePmc(dailyLoads: { date: string; load: number }[]): PmcPoi
 
 export type FormStateKey = "fresh" | "neutral" | "productive" | "fatigued";
 
+// Form (TSB) band edges: above +5 is fresh/tapered, down to -10 is neutral,
+// down to -30 is the productive training zone, and below that is deep fatigue.
+const TSB_FRESH_ABOVE = 5;
+const TSB_NEUTRAL_FLOOR = -10;
+const TSB_PRODUCTIVE_FLOOR = -30;
+
 /**
  * Buckets a TSB value into a form state. Above +5 is fresh (tapered), the
  * -10..+5 band is neutral, -30..-10 is the productive training zone, and
  * anything below -30 is deep fatigue.
  */
 export function formState(tsb: number): { key: FormStateKey } {
-  if (tsb > 5) return { key: "fresh" };
-  if (tsb >= -10) return { key: "neutral" };
-  if (tsb >= -30) return { key: "productive" };
+  if (tsb > TSB_FRESH_ABOVE) return { key: "fresh" };
+  if (tsb >= TSB_NEUTRAL_FLOOR) return { key: "neutral" };
+  if (tsb >= TSB_PRODUCTIVE_FLOOR) return { key: "productive" };
   return { key: "fatigued" };
 }
 
@@ -195,7 +247,9 @@ export function hrZones(thresholds: AthleteThresholds): Zone[] {
  * faster (higher) zones carry the smaller pace numbers. Bounds are s/km.
  */
 export function paceZones(thresholds: AthleteThresholds): Zone[] {
-  const [p1, p2, p3, p4] = ZONE_FRACTIONS.map((f) => Math.round(thresholds.thresholdPaceSPerKm / f));
+  const [p1, p2, p3, p4] = ZONE_FRACTIONS.map((f) =>
+    Math.round(thresholds.thresholdPaceSPerKm / f)
+  );
   return [
     { zone: 1, min: p1, max: null },
     { zone: 2, min: p2, max: p1 },

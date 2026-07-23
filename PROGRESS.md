@@ -3,7 +3,7 @@
 Autonomous build session started 2026-07-22. Architect + validator: Claude (Opus 4.8).
 Each phase: sub-agent implements, I validate against real Turso data, then commit + push + verify prod.
 
-Prod: https://training-hub-psi-one.vercel.app · Shared Turso DB (local dev + prod point at the same database).
+Prod: https://training-hub-psi-one.vercel.app · Shared Turso DB (local dev + prod point at the same database). _(Since split: local dev uses `data/app.db`; the write scripts refuse remote DBs unless `ALLOW_REMOTE_DB=1`.)_
 
 ---
 

@@ -4,16 +4,31 @@ export type ActivityStatus = "pending_review" | "confirmed";
 
 export type WearStatus = "fresh" | "worn" | "critical" | "retired";
 
-export interface Shoe {
+// The shared gear base: the identity + fields and lifecycle every gear entity
+// carries. Shoes and bikes each EXTEND this with their own specialized fields
+// (shoes add a retirement cap; bikes add indoor/outdoor/ride breakdown).
+export interface Gear {
   id: number;
   name: string;
   role: string | null;
   strava_gear_id: string | null;
   photo_path: string | null;
   initial_km: number;
-  retirement_km: number | null;
   retired_at: string | null;
   created_at: string;
+}
+
+// The lean projection the gear selects consume (settings matcher, manual entry,
+// review). The option shape is identical for both entities, so it lives once.
+export interface GearOption {
+  id: number;
+  name: string;
+  role: string | null;
+  retired: boolean;
+}
+
+export interface Shoe extends Gear {
+  retirement_km: number | null;
 }
 
 export interface ShoeWithMileage extends Shoe {
@@ -41,7 +56,7 @@ export interface Activity {
   detail_synced_at: string | null;
   bike_id: number | null;
   bike_name: string | null;
-  is_race: number;
+  is_race: boolean;
   goal_pace_s_per_km: number | null;
   created_at: string;
 }
@@ -68,27 +83,15 @@ export interface SplitInput {
 export interface StravaGear {
   id: string;
   name: string;
-  distance?: number;
-  retired?: boolean;
+  distance: number | null;
+  retired: boolean | null;
 }
 
-export interface ShoeOption {
-  id: number;
-  name: string;
-  role: string | null;
-  retired: boolean;
-}
+export type ShoeOption = GearOption;
 
-export interface Bike {
-  id: number;
-  name: string;
-  role: string | null;
-  strava_gear_id: string | null;
-  photo_path: string | null;
-  initial_km: number;
-  retired_at: string | null;
-  created_at: string;
-}
+// A bike carries exactly the shared gear base (no extra stored field); its
+// distinguishing data lives on BikeWithMileage.
+export type Bike = Gear;
 
 export interface BikeWithMileage extends Bike {
   current_km: number;
@@ -97,9 +100,4 @@ export interface BikeWithMileage extends Bike {
   ride_count: number;
 }
 
-export interface BikeOption {
-  id: number;
-  name: string;
-  role: string | null;
-  retired: boolean;
-}
+export type BikeOption = GearOption;

@@ -1,25 +1,15 @@
-export type SportCategory =
-  | "run"
-  | "bike"
-  | "strength"
-  | "walk"
-  | "elliptical"
-  | "swim"
-  | "other";
+export type SportCategory = "run" | "bike" | "strength" | "walk" | "elliptical" | "swim" | "other";
 
-export const SPORT_CATEGORIES: Array<{ key: SportCategory; label: string }> = [
-  { key: "run", label: "Run" },
-  { key: "bike", label: "Bike" },
-  { key: "strength", label: "Strength" },
-  { key: "walk", label: "Walk" },
-  { key: "elliptical", label: "Elliptical" },
-  { key: "swim", label: "Swim" },
-  { key: "other", label: "Other" },
+/** Sport categories in display order. Display labels live in the i18n dict (`t.sports`). */
+export const SPORT_CATEGORIES: readonly SportCategory[] = [
+  "run",
+  "bike",
+  "strength",
+  "walk",
+  "elliptical",
+  "swim",
+  "other",
 ];
-
-export function categoryLabel(key: SportCategory): string {
-  return SPORT_CATEGORIES.find((c) => c.key === key)?.label ?? "Other";
-}
 
 /** Buckets a Strava sport_type into a log filter category. */
 export function sportCategory(sport: string | null | undefined): SportCategory {

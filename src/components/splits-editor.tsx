@@ -106,9 +106,7 @@ export function SplitsEditor({
                   {retired.map((shoe) => (
                     <SelectItem key={shoe.id} value={String(shoe.id)}>
                       <span className="truncate">{shoe.name}</span>
-                      <span className="text-xs text-muted-foreground">
-                        · {t.splits.retiredTag}
-                      </span>
+                      <span className="text-xs text-muted-foreground">· {t.splits.retiredTag}</span>
                     </SelectItem>
                   ))}
                 </>

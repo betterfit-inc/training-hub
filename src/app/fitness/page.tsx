@@ -7,17 +7,13 @@ import { WeeklyDigest } from "@/components/weekly-digest";
 import { getAthleteThresholds, getWeeklyDigest, listActivityLoadsForPmc } from "@/lib/db";
 import { isCoachConfigured } from "@/lib/coach";
 import { getDict } from "@/lib/lang";
-import { computePmc, formState, type FormStateKey } from "@/lib/fitness";
-import { localDateInputValue, mondayOf } from "@/lib/format";
+import { computePmc, dailyLoadSeries, formState, type FormStateKey } from "@/lib/fitness";
+import { localDateInputValue, mondayOf, parseLocalDate } from "@/lib/format";
+import { timeWindows } from "@/lib/windows";
 
 export const metadata = { title: "Fitness" };
 
-const WINDOWS = [
-  { key: "90d", days: 90 },
-  { key: "6m", days: 183 },
-  { key: "1y", days: 365 },
-  { key: "all", days: Number.POSITIVE_INFINITY },
-] as const;
+const WINDOWS = timeWindows(["90d", "6m", "1y", "all"]);
 
 const STATE_COLOR: Record<FormStateKey, string> = {
   fresh: "var(--positive)",
@@ -30,23 +26,6 @@ function rampColor(ramp: number): string {
   if (ramp > 8) return "var(--wear-worn)"; // building fast — worth watching
   if (ramp > 0) return "var(--primary)";
   return "var(--muted-foreground)";
-}
-
-function parseLocalDate(key: string): Date {
-  const [y, m, d] = key.split("-").map(Number);
-  return new Date(y, m - 1, d);
-}
-
-/** Inclusive list of local YYYY-MM-DD day keys from `from` to `to`. */
-function eachDay(from: string, to: string): string[] {
-  const out: string[] = [];
-  const cursor = parseLocalDate(from);
-  const end = parseLocalDate(to);
-  while (cursor <= end) {
-    out.push(localDateInputValue(cursor));
-    cursor.setDate(cursor.getDate() + 1);
-  }
-  return out;
 }
 
 function StatTile({
@@ -88,14 +67,11 @@ export default async function FitnessPage({ searchParams }: PageProps<"/fitness"
   const rawWindow = typeof params.window === "string" ? params.window : "6m";
   const win = WINDOWS.find((w) => w.key === rawWindow) ?? WINDOWS[1];
 
-  // Sum TSS per local calendar day.
-  const byDay = new Map<string, number>();
-  for (const load of loads) {
-    const key = localDateInputValue(new Date(load.started_at));
-    byDay.set(key, (byDay.get(key) ?? 0) + load.tss);
-  }
+  // PMC runs over the whole history (gap-filled to today) so CTL/ATL carry the
+  // full accumulation; the window only slices what the chart shows.
+  const daily = dailyLoadSeries(loads);
 
-  if (byDay.size === 0) {
+  if (daily.length === 0) {
     return (
       <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
         <h1 className="font-display text-4xl font-bold uppercase">{t.fitness.title}</h1>
@@ -107,12 +83,6 @@ export default async function FitnessPage({ searchParams }: PageProps<"/fitness"
     );
   }
 
-  // PMC runs over the whole history (gap-filled to today) so CTL/ATL carry the
-  // full accumulation; the window only slices what the chart shows.
-  const dayKeys = [...byDay.keys()].sort();
-  const today = localDateInputValue(new Date());
-  const lastDay = dayKeys[dayKeys.length - 1] > today ? dayKeys[dayKeys.length - 1] : today;
-  const daily = eachDay(dayKeys[0], lastDay).map((date) => ({ date, load: byDay.get(date) ?? 0 }));
   const pmc = computePmc(daily);
   const latest = pmc[pmc.length - 1];
   const state = formState(latest.tsb);

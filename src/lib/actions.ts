@@ -1,10 +1,12 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { cookies } from "next/headers";
-import { dictionaries, splitErrorText, isLang, type Dict } from "./i18n";
-import { LANG_COOKIE, getLang } from "./lang";
-import { storePhoto } from "./storage";
+import { redirect } from "next/navigation";
+import { NONE } from "./constants";
+import { splitErrorText, isLang } from "./i18n";
+import { LANG_COOKIE } from "./lang";
+import { storePhoto, deletePhoto, InvalidImageError } from "./storage";
 import {
   addActivityChatMessage,
   clearActivityChat,
@@ -19,7 +21,6 @@ import {
   getShoe,
   listActivitiesSince,
   listActivityChat,
-  listActivityLoadsForPmc,
   recomputeActivityLoad,
   recomputeAllLoads,
   replaceActivitySplits,
@@ -37,7 +38,6 @@ import {
   updateShoe,
   confirmActivity,
   type BikeFields,
-  type JournalFields,
   type ShoeFields,
 } from "./db";
 import {
@@ -48,11 +48,9 @@ import {
   runWeeklyDigest,
   summarizeStreams,
   type CoachLoad,
-  type CoachPmc,
   type CoachStreamSummary,
 } from "./coach";
-import { computeLoad, computePmc, type PmcPoint } from "./fitness";
-import { localDateInputValue } from "./format";
+import { computeLoad } from "./fitness";
 import {
   ensureActivityStreams,
   stravaConfigured,
@@ -60,22 +58,20 @@ import {
   syncActivities,
   type SyncResult,
 } from "./strava";
-import { validateSplits } from "./validate";
+import { parseId, validateSplits } from "./validate";
+import { fail, type ActionResult } from "./action-result";
+import { logger } from "./telemetry";
+import { authConfigured, createSession, destroySession, requireAuth, verifyPassword } from "./auth";
+import {
+  buildPmc,
+  dict,
+  inRange,
+  normalizeJournal,
+  normalizeSplits,
+  pmcPoint,
+  refreshAll,
+} from "./action-helpers";
 import type { Feeling, SplitInput } from "./types";
-
-type ActionResult = { ok: true } | { ok: false; error: string };
-
-async function dict(): Promise<Dict> {
-  return dictionaries[await getLang()];
-}
-
-function fail(error: unknown, fallback: string): { ok: false; error: string } {
-  return { ok: false, error: error instanceof Error ? error.message : fallback };
-}
-
-function refreshAll() {
-  revalidatePath("/", "layout");
-}
 
 // ---------------------------------------------------------------------------
 // Language
@@ -92,15 +88,37 @@ export async function setLangAction(lang: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Auth (T1.6) — single-owner password login. The mutating actions below each
+// call requireAuth(); these two manage the session itself and so are NOT gated.
+// ---------------------------------------------------------------------------
+
+export async function loginAction(formData: FormData): Promise<ActionResult> {
+  const t = await dict();
+  const password = String(formData.get("password") ?? "");
+  // Refuse to authenticate when auth is unconfigured (empty password/secret) —
+  // there is no session to create against an empty secret.
+  if (!authConfigured() || !verifyPassword(password)) {
+    return { ok: false, error: t.login.invalid };
+  }
+  await createSession();
+  // redirect() throws NEXT_REDIRECT, so it must sit outside any try/catch.
+  redirect("/");
+}
+
+export async function logoutAction(): Promise<void> {
+  await destroySession();
+  redirect("/login");
+}
+
+// ---------------------------------------------------------------------------
 // Sync
 // ---------------------------------------------------------------------------
 
-export type SyncActionResult =
-  | ({ ok: true } & SyncResult)
-  | { ok: false; error: string };
+export type SyncActionResult = ({ ok: true } & SyncResult) | { ok: false; error: string };
 
 export async function syncNowAction(): Promise<SyncActionResult> {
   const t = await dict();
+  if (!(await requireAuth())) return { ok: false, error: t.errors.unauthorized };
   if (!stravaConfigured()) return { ok: false, error: t.errors.envMissing };
   if (!(await isStravaConnected())) return { ok: false, error: t.errors.notConnected };
   try {
@@ -116,37 +134,6 @@ export async function syncNowAction(): Promise<SyncActionResult> {
 // Review + journal
 // ---------------------------------------------------------------------------
 
-const FEELINGS: Feeling[] = ["great", "good", "ok", "rough", "terrible"];
-
-function normalizeJournal(
-  input: {
-    rpe: number | null;
-    feeling: Feeling | null;
-    workoutNotes: string;
-    healthNotes: string;
-  },
-  t: Dict
-): JournalFields | { error: string } {
-  const rpe = input.rpe == null ? null : Math.round(input.rpe);
-  if (rpe != null && (rpe < 1 || rpe > 10)) return { error: t.errors.invalidRpe };
-  if (input.feeling != null && !FEELINGS.includes(input.feeling)) {
-    return { error: t.errors.invalidFeeling };
-  }
-  return {
-    rpe,
-    feeling: input.feeling,
-    workout_notes: input.workoutNotes.trim() || null,
-    health_notes: input.healthNotes.trim() || null,
-  };
-}
-
-function normalizeSplits(splits: SplitInput[]): SplitInput[] {
-  return splits.map((s) => ({
-    shoe_id: s.shoe_id,
-    km: Math.round((Number(s.km) || 0) * 100) / 100,
-  }));
-}
-
 export async function confirmActivityAction(input: {
   activityId: number;
   splits: SplitInput[];
@@ -157,6 +144,7 @@ export async function confirmActivityAction(input: {
   healthNotes: string;
 }): Promise<ActionResult> {
   const t = await dict();
+  if (!(await requireAuth())) return { ok: false, error: t.errors.unauthorized };
   try {
     const activity = await getActivity(input.activityId);
     if (!activity) return { ok: false, error: t.errors.activityNotFound };
@@ -169,8 +157,7 @@ export async function confirmActivityAction(input: {
     const journal = normalizeJournal(input, t);
     if ("error" in journal) return { ok: false, error: journal.error };
 
-    const bikeId =
-      input.bikeId != null && (await getBike(input.bikeId)) ? input.bikeId : null;
+    const bikeId = input.bikeId != null && (await getBike(input.bikeId)) ? input.bikeId : null;
 
     await confirmActivity(input.activityId, journal, splits, bikeId);
     refreshAll();
@@ -188,6 +175,7 @@ export async function updateJournalAction(input: {
   healthNotes: string;
 }): Promise<ActionResult> {
   const t = await dict();
+  if (!(await requireAuth())) return { ok: false, error: t.errors.unauthorized };
   try {
     const activity = await getActivity(input.activityId);
     if (!activity) return { ok: false, error: t.errors.activityNotFound };
@@ -206,6 +194,7 @@ export async function updateSplitsAction(input: {
   splits: SplitInput[];
 }): Promise<ActionResult> {
   const t = await dict();
+  if (!(await requireAuth())) return { ok: false, error: t.errors.unauthorized };
   try {
     const activity = await getActivity(input.activityId);
     if (!activity) return { ok: false, error: t.errors.activityNotFound };
@@ -225,6 +214,7 @@ export async function setActivityBikeAction(
   bikeId: number | null
 ): Promise<ActionResult> {
   const t = await dict();
+  if (!(await requireAuth())) return { ok: false, error: t.errors.unauthorized };
   try {
     const activity = await getActivity(activityId);
     if (!activity) return { ok: false, error: t.errors.activityNotFound };
@@ -243,6 +233,7 @@ export async function setActivityRaceAction(input: {
   goalPace: number | null;
 }): Promise<ActionResult> {
   const t = await dict();
+  if (!(await requireAuth())) return { ok: false, error: t.errors.unauthorized };
   try {
     const activity = await getActivity(input.activityId);
     if (!activity) return { ok: false, error: t.errors.activityNotFound };
@@ -272,12 +263,9 @@ export interface ThresholdsInput {
   ftpProvisional: boolean;
 }
 
-function inRange(value: number, lo: number, hi: number): boolean {
-  return Number.isFinite(value) && value >= lo && value <= hi;
-}
-
 export async function saveThresholdsAction(input: ThresholdsInput): Promise<ActionResult> {
   const t = await dict();
+  if (!(await requireAuth())) return { ok: false, error: t.errors.unauthorized };
   try {
     const maxHr = Math.round(input.maxHr);
     const restingHr = Math.round(input.restingHr);
@@ -304,8 +292,20 @@ export async function saveThresholdsAction(input: ThresholdsInput): Promise<Acti
       restingHrEstimated: input.restingHrEstimated,
       ftpProvisional: input.ftpProvisional,
     });
-    // Thresholds drive every TSS value, so the curves refresh with them.
-    await recomputeAllLoads();
+    // Thresholds drive every TSS value, so the curves must refresh with them.
+    // But that recompute scales with confirmed-activity history (1200+ rows) and
+    // must not block the save response (G7.3, T3.7): the edit above is already
+    // durably persisted, so schedule the recompute to run AFTER the response with
+    // `after()` (Next 16, `next/server`) instead of awaiting it in-request. A
+    // post-response failure is logged (not swallowed) so it stays observable; the
+    // thresholds remain saved regardless of the deferred recompute's outcome.
+    after(async () => {
+      try {
+        await recomputeAllLoads();
+      } catch (error) {
+        logger.error("actions.saveThresholds.recompute", { error });
+      }
+    });
     refreshAll();
     return { ok: true };
   } catch (error) {
@@ -318,6 +318,7 @@ export async function setActivityLoadManualAction(
   tss: number
 ): Promise<ActionResult> {
   const t = await dict();
+  if (!(await requireAuth())) return { ok: false, error: t.errors.unauthorized };
   try {
     if (!(await getActivity(activityId))) return { ok: false, error: t.errors.activityNotFound };
     const value = Math.round((Number(tss) || 0) * 10) / 10;
@@ -332,6 +333,7 @@ export async function setActivityLoadManualAction(
 
 export async function resetActivityLoadAction(activityId: number): Promise<ActionResult> {
   const t = await dict();
+  if (!(await requireAuth())) return { ok: false, error: t.errors.unauthorized };
   try {
     if (!(await getActivity(activityId))) return { ok: false, error: t.errors.activityNotFound };
     await recomputeActivityLoad(activityId);
@@ -348,9 +350,16 @@ export async function resetActivityLoadAction(activityId: number): Promise<Actio
 
 export async function saveShoeAction(formData: FormData): Promise<ActionResult> {
   const t = await dict();
+  if (!(await requireAuth())) return { ok: false, error: t.errors.unauthorized };
   try {
+    // An absent/blank id means "create"; a present-but-invalid id must NOT
+    // silently fall through to create a stray row (G6.4).
     const idRaw = formData.get("id");
-    const id = typeof idRaw === "string" && idRaw ? Number(idRaw) : null;
+    let id: number | null = null;
+    if (typeof idRaw === "string" && idRaw.trim() !== "") {
+      id = parseId(idRaw);
+      if (id === null) return { ok: false, error: t.errors.invalidId };
+    }
 
     const name = String(formData.get("name") ?? "").trim();
     if (!name) return { ok: false, error: t.errors.shoeNeedsName };
@@ -365,8 +374,8 @@ export async function saveShoeAction(formData: FormData): Promise<ActionResult> 
       return { ok: false, error: t.errors.invalidRetirement };
     }
 
-    const gearRaw = String(formData.get("strava_gear_id") ?? "none");
-    const gearId = gearRaw && gearRaw !== "none" ? gearRaw : null;
+    const gearRaw = String(formData.get("strava_gear_id") ?? NONE);
+    const gearId = gearRaw && gearRaw !== NONE ? gearRaw : null;
 
     let photoPath: string | null = null;
     const photo = formData.get("photo");
@@ -383,20 +392,29 @@ export async function saveShoeAction(formData: FormData): Promise<ActionResult> 
     };
 
     if (id) {
-      if (!(await getShoe(id))) return { ok: false, error: t.errors.shoeNotFound };
+      const existing = await getShoe(id);
+      if (!existing) return { ok: false, error: t.errors.shoeNotFound };
       await updateShoe(id, fields, photoPath);
+      // A replaced photo orphans the previous asset; clean it up after the
+      // response so it never blocks or fails the save (best-effort, logs).
+      if (photoPath && existing.photo_path && existing.photo_path !== photoPath) {
+        const orphan = existing.photo_path;
+        after(() => deletePhoto(orphan));
+      }
     } else {
       await createShoe(fields, photoPath);
     }
     refreshAll();
     return { ok: true };
   } catch (error) {
+    if (error instanceof InvalidImageError) return { ok: false, error: t.errors.invalidImage };
     return fail(error, t.errors.generic);
   }
 }
 
 export async function setShoeRetiredAction(id: number, retired: boolean): Promise<ActionResult> {
   const t = await dict();
+  if (!(await requireAuth())) return { ok: false, error: t.errors.unauthorized };
   try {
     if (!(await getShoe(id))) return { ok: false, error: t.errors.shoeNotFound };
     await setShoeRetired(id, retired);
@@ -412,6 +430,7 @@ export async function setShoeGearAction(
   gearId: string | null
 ): Promise<ActionResult> {
   const t = await dict();
+  if (!(await requireAuth())) return { ok: false, error: t.errors.unauthorized };
   try {
     if (!(await getShoe(shoeId))) return { ok: false, error: t.errors.shoeNotFound };
     await setShoeGear(shoeId, gearId);
@@ -428,9 +447,16 @@ export async function setShoeGearAction(
 
 export async function saveBikeAction(formData: FormData): Promise<ActionResult> {
   const t = await dict();
+  if (!(await requireAuth())) return { ok: false, error: t.errors.unauthorized };
   try {
+    // An absent/blank id means "create"; a present-but-invalid id must NOT
+    // silently fall through to create a stray row (G6.4).
     const idRaw = formData.get("id");
-    const id = typeof idRaw === "string" && idRaw ? Number(idRaw) : null;
+    let id: number | null = null;
+    if (typeof idRaw === "string" && idRaw.trim() !== "") {
+      id = parseId(idRaw);
+      if (id === null) return { ok: false, error: t.errors.invalidId };
+    }
 
     const name = String(formData.get("name") ?? "").trim();
     if (!name) return { ok: false, error: t.errors.bikeNeedsName };
@@ -441,8 +467,8 @@ export async function saveBikeAction(formData: FormData): Promise<ActionResult> 
       return { ok: false, error: t.errors.invalidBaseline };
     }
 
-    const gearRaw = String(formData.get("strava_gear_id") ?? "none");
-    const gearId = gearRaw && gearRaw !== "none" ? gearRaw : null;
+    const gearRaw = String(formData.get("strava_gear_id") ?? NONE);
+    const gearId = gearRaw && gearRaw !== NONE ? gearRaw : null;
 
     let photoPath: string | null = null;
     const photo = formData.get("photo");
@@ -458,20 +484,29 @@ export async function saveBikeAction(formData: FormData): Promise<ActionResult> 
     };
 
     if (id) {
-      if (!(await getBike(id))) return { ok: false, error: t.errors.bikeNotFound };
+      const existing = await getBike(id);
+      if (!existing) return { ok: false, error: t.errors.bikeNotFound };
       await updateBike(id, fields, photoPath);
+      // A replaced photo orphans the previous asset; clean it up after the
+      // response so it never blocks or fails the save (best-effort, logs).
+      if (photoPath && existing.photo_path && existing.photo_path !== photoPath) {
+        const orphan = existing.photo_path;
+        after(() => deletePhoto(orphan));
+      }
     } else {
       await createBike(fields, photoPath);
     }
     refreshAll();
     return { ok: true };
   } catch (error) {
+    if (error instanceof InvalidImageError) return { ok: false, error: t.errors.invalidImage };
     return fail(error, t.errors.generic);
   }
 }
 
 export async function setBikeRetiredAction(id: number, retired: boolean): Promise<ActionResult> {
   const t = await dict();
+  if (!(await requireAuth())) return { ok: false, error: t.errors.unauthorized };
   try {
     if (!(await getBike(id))) return { ok: false, error: t.errors.bikeNotFound };
     await setBikeRetired(id, retired);
@@ -487,6 +522,7 @@ export async function setBikeGearAction(
   gearId: string | null
 ): Promise<ActionResult> {
   const t = await dict();
+  if (!(await requireAuth())) return { ok: false, error: t.errors.unauthorized };
   try {
     if (!(await getBike(bikeId))) return { ok: false, error: t.errors.bikeNotFound };
     await setBikeGear(bikeId, gearId);
@@ -503,6 +539,7 @@ export async function setBikeGearAction(
 
 export async function disconnectStravaAction(): Promise<ActionResult> {
   const t = await dict();
+  if (!(await requireAuth())) return { ok: false, error: t.errors.unauthorized };
   try {
     await clearStravaAuth();
     refreshAll();
@@ -518,13 +555,14 @@ export async function createManualActivityAction(input: {
   shoeId: number;
 }): Promise<ActionResult> {
   const t = await dict();
+  if (!(await requireAuth())) return { ok: false, error: t.errors.unauthorized };
   try {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) {
       return { ok: false, error: t.errors.invalidDate };
     }
     const km = Math.round((Number(input.km) || 0) * 100) / 100;
-    if (km === 0) return { ok: false, error: t.toasts.zeroDistance };
-    if (!(await getShoe(input.shoeId))) return { ok: false, error: t.toasts.pickShoe };
+    if (km === 0) return { ok: false, error: t.errors.zeroDistance };
+    if (!(await getShoe(input.shoeId))) return { ok: false, error: t.errors.pickShoe };
     await createManualActivity({ date: input.date, km, shoe_id: input.shoeId });
     refreshAll();
     return { ok: true };
@@ -539,55 +577,14 @@ export async function createManualActivityAction(input: {
 
 export type CoachMessageResult = { ok: true; reply: string } | { ok: false; error: string };
 export type WeeklyDigestResult =
-  | { ok: true; text: string; generatedAt: string }
-  | { ok: false; error: string };
-
-function parseLocalDate(key: string): Date {
-  const [y, m, d] = key.split("-").map(Number);
-  return new Date(y, m - 1, d);
-}
-
-/** Inclusive list of local YYYY-MM-DD day keys from `from` to `to`. */
-function eachDay(from: string, to: string): string[] {
-  const out: string[] = [];
-  const cursor = parseLocalDate(from);
-  const end = parseLocalDate(to);
-  while (cursor <= end) {
-    out.push(localDateInputValue(cursor));
-    cursor.setDate(cursor.getDate() + 1);
-  }
-  return out;
-}
-
-/**
- * Whole-history Performance Management Chart, gap-filled to today. Mirrors the
- * fitness page: sum TSS per local calendar day, then run the EWMA. Empty when no
- * confirmed activity has a training load yet.
- */
-async function buildPmc(): Promise<PmcPoint[]> {
-  const loads = await listActivityLoadsForPmc();
-  if (loads.length === 0) return [];
-  const byDay = new Map<string, number>();
-  for (const load of loads) {
-    const key = localDateInputValue(new Date(load.started_at));
-    byDay.set(key, (byDay.get(key) ?? 0) + load.tss);
-  }
-  const dayKeys = [...byDay.keys()].sort();
-  const today = localDateInputValue(new Date());
-  const lastDay = dayKeys[dayKeys.length - 1] > today ? dayKeys[dayKeys.length - 1] : today;
-  const daily = eachDay(dayKeys[0], lastDay).map((date) => ({ date, load: byDay.get(date) ?? 0 }));
-  return computePmc(daily);
-}
-
-function pmcPoint(point: PmcPoint | null | undefined): CoachPmc | null {
-  return point ? { ctl: point.ctl, atl: point.atl, tsb: point.tsb } : null;
-}
+  { ok: true; text: string; generatedAt: string } | { ok: false; error: string };
 
 export async function sendCoachMessageAction(input: {
   activityId: number;
   message: string;
 }): Promise<CoachMessageResult> {
   const t = await dict();
+  if (!(await requireAuth())) return { ok: false, error: t.errors.unauthorized };
   if (!isCoachConfigured()) return { ok: false, error: t.errors.coachNotConfigured };
   const message = input.message.trim();
   if (!message) return { ok: false, error: t.errors.generic };
@@ -656,6 +653,7 @@ export async function sendCoachMessageAction(input: {
 
 export async function clearCoachAction(activityId: number): Promise<ActionResult> {
   const t = await dict();
+  if (!(await requireAuth())) return { ok: false, error: t.errors.unauthorized };
   try {
     await clearActivityChat(activityId);
     refreshAll();
@@ -667,6 +665,7 @@ export async function clearCoachAction(activityId: number): Promise<ActionResult
 
 export async function generateWeeklyDigestAction(): Promise<WeeklyDigestResult> {
   const t = await dict();
+  if (!(await requireAuth())) return { ok: false, error: t.errors.unauthorized };
   if (!isCoachConfigured()) return { ok: false, error: t.errors.coachNotConfigured };
   try {
     const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();

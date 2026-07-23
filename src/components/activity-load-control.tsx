@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useI18n } from "@/components/i18n-provider";
 import { resetActivityLoadAction, setActivityLoadManualAction } from "@/lib/actions";
+import type { LoadMethod } from "@/lib/fitness";
 
 export function ActivityLoadControl({
   activityId,
@@ -17,7 +18,7 @@ export function ActivityLoadControl({
 }: {
   activityId: number;
   tss: number;
-  method: string | null;
+  method: LoadMethod | null;
   source: "auto" | "manual" | "computed";
 }) {
   const router = useRouter();
@@ -105,7 +106,12 @@ export function ActivityLoadControl({
       ) : methodLabel ? (
         <span className="text-xs text-muted-foreground">· {methodLabel}</span>
       ) : null}
-      <Button size="icon-sm" variant="ghost" aria-label={t.detail.editLoad} onClick={() => setEditing(true)}>
+      <Button
+        size="icon-sm"
+        variant="ghost"
+        aria-label={t.detail.editLoad}
+        onClick={() => setEditing(true)}
+      >
         <PencilIcon />
       </Button>
       {source === "manual" ? (

@@ -122,7 +122,7 @@ export function buildActivityContext(input: {
   if (activity.avg_hr) lines.push(`- Avg HR: ${fmtHr(activity.avg_hr)}`);
   if (activity.elevation_gain_m != null)
     lines.push(`- Elevation gain: ${Math.round(activity.elevation_gain_m)} m`);
-  if (activity.is_race === 1) {
+  if (activity.is_race) {
     const goal = activity.goal_pace_s_per_km
       ? `, goal pace ${fmtPace(activity.goal_pace_s_per_km)}`
       : "";
@@ -131,8 +131,7 @@ export function buildActivityContext(input: {
 
   if (load) {
     const method = load.method ? ` (from ${METHOD_LABEL[load.method] ?? load.method})` : "";
-    const intensity =
-      load.intensityFactor != null ? `, IF ${load.intensityFactor.toFixed(2)}` : "";
+    const intensity = load.intensityFactor != null ? `, IF ${load.intensityFactor.toFixed(2)}` : "";
     lines.push(`- Training load: ${load.tss.toFixed(0)} TSS${method}${intensity}`);
   }
 
@@ -161,7 +160,9 @@ export function buildActivityContext(input: {
   lines.push("");
   lines.push("ATHLETE THRESHOLDS");
   lines.push(`- Max HR: ${thresholds.maxHr} bpm`);
-  lines.push(`- Resting HR: ${thresholds.restingHr} bpm${thresholds.restingHrEstimated ? " (estimated)" : ""}`);
+  lines.push(
+    `- Resting HR: ${thresholds.restingHr} bpm${thresholds.restingHrEstimated ? " (estimated)" : ""}`
+  );
   lines.push(`- LTHR: ${thresholds.lthr} bpm`);
   lines.push(`- Threshold pace: ${fmtPace(thresholds.thresholdPaceSPerKm)}`);
   lines.push(`- FTP: ${thresholds.ftpW} W${thresholds.ftpProvisional ? " (provisional)" : ""}`);
@@ -229,7 +230,9 @@ export function buildDigestContext(input: {
   lines.push("");
   lines.push("ATHLETE THRESHOLDS");
   lines.push(`- Max HR ${thresholds.maxHr} bpm, LTHR ${thresholds.lthr} bpm`);
-  lines.push(`- Threshold pace ${fmtPace(thresholds.thresholdPaceSPerKm)}, FTP ${thresholds.ftpW} W`);
+  lines.push(
+    `- Threshold pace ${fmtPace(thresholds.thresholdPaceSPerKm)}, FTP ${thresholds.ftpW} W`
+  );
 
   return lines.join("\n");
 }

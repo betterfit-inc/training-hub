@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useI18n } from "@/components/i18n-provider";
-import { fmtDayMonth } from "@/lib/format";
+import { fmtDayMonth, parseLocalDate } from "@/lib/format";
 
 export interface PmcSeriesPoint {
   date: string; // YYYY-MM-DD local
@@ -32,11 +32,6 @@ const TSB_TOP = MAIN_BOTTOM + GAP;
 const TSB_MID = TSB_TOP + TSB_H / 2;
 const PMC_H = TSB_TOP + TSB_H + AXIS_H;
 
-function parseLocalDate(key: string): Date {
-  const [y, m, d] = key.split("-").map(Number);
-  return new Date(y, m - 1, d);
-}
-
 function niceMax(value: number): number {
   if (value <= 0) return 1;
   const pow = Math.pow(10, Math.floor(Math.log10(value)));
@@ -65,15 +60,21 @@ export function PmcChart({ points, weekly }: { points: PmcSeriesPoint[]; weekly:
   const yLoad = (v: number) => MAIN_BOTTOM - (v / loadMax) * MAIN_H;
   const yTsb = (v: number) => TSB_MID - (v / tsbMax) * (TSB_H / 2);
 
-  const ctlLine = points.map((p, i) => `${i ? "L" : "M"}${xPx(i).toFixed(1)},${yLoad(p.ctl).toFixed(1)}`).join(" ");
+  const ctlLine = points
+    .map((p, i) => `${i ? "L" : "M"}${xPx(i).toFixed(1)},${yLoad(p.ctl).toFixed(1)}`)
+    .join(" ");
   const ctlArea =
     n > 0
       ? `M${xPx(0).toFixed(1)},${MAIN_BOTTOM} ` +
         points.map((p, i) => `L${xPx(i).toFixed(1)},${yLoad(p.ctl).toFixed(1)}`).join(" ") +
         ` L${xPx(n - 1).toFixed(1)},${MAIN_BOTTOM} Z`
       : "";
-  const atlLine = points.map((p, i) => `${i ? "L" : "M"}${xPx(i).toFixed(1)},${yLoad(p.atl).toFixed(1)}`).join(" ");
-  const tsbLine = points.map((p, i) => `${i ? "L" : "M"}${xPx(i).toFixed(1)},${yTsb(p.tsb).toFixed(1)}`).join(" ");
+  const atlLine = points
+    .map((p, i) => `${i ? "L" : "M"}${xPx(i).toFixed(1)},${yLoad(p.atl).toFixed(1)}`)
+    .join(" ");
+  const tsbLine = points
+    .map((p, i) => `${i ? "L" : "M"}${xPx(i).toFixed(1)},${yTsb(p.tsb).toFixed(1)}`)
+    .join(" ");
   const tsbArea =
     n > 0
       ? `M${xPx(0).toFixed(1)},${TSB_MID} ` +
@@ -101,6 +102,28 @@ export function PmcChart({ points, weekly }: { points: PmcSeriesPoint[]; weekly:
     setHover(idx);
   };
 
+  // Keyboard navigation across the data points, mirroring activity-chart: arrows
+  // step the active point (from no selection, ArrowRight/Left land on the ends),
+  // Home/End jump to the first/last.
+  const onKey = (e: React.KeyboardEvent<SVGSVGElement>) => {
+    if (n === 0) return;
+    if (e.key === "ArrowRight") {
+      setHover(Math.min(n - 1, (hover == null ? -1 : hover) + 1));
+      e.preventDefault();
+    } else if (e.key === "ArrowLeft") {
+      // From no selection, step back from the count so we land on the LAST
+      // point (n - 1); otherwise step back one from the current point.
+      setHover(Math.max(0, (hover == null ? n : hover) - 1));
+      e.preventDefault();
+    } else if (e.key === "Home") {
+      setHover(0);
+      e.preventDefault();
+    } else if (e.key === "End") {
+      setHover(n - 1);
+      e.preventDefault();
+    }
+  };
+
   const hoverX = hover != null ? xPx(hover) : null;
   const hoverPoint = hover != null ? points[hover] : null;
 
@@ -109,7 +132,8 @@ export function PmcChart({ points, weekly }: { points: PmcSeriesPoint[]; weekly:
   const WEEK_AXIS = 20;
   const weekMax = niceMax(Math.max(1, ...weekly.map((w) => w.load)));
   const barGap = 3;
-  const barW = weekly.length > 0 ? Math.max(2, (PLOT_W - barGap * (weekly.length - 1)) / weekly.length) : 0;
+  const barW =
+    weekly.length > 0 ? Math.max(2, (PLOT_W - barGap * (weekly.length - 1)) / weekly.length) : 0;
   const weekTicks = useMemo(() => {
     if (weekly.length === 0) return [];
     const count = Math.min(4, weekly.length);
@@ -124,15 +148,27 @@ export function PmcChart({ points, weekly }: { points: PmcSeriesPoint[]; weekly:
       <div>
         <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs font-medium">
           <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-            <span className="size-2 rounded-full" style={{ backgroundColor: "var(--primary)" }} aria-hidden />
+            <span
+              className="size-2 rounded-full"
+              style={{ backgroundColor: "var(--primary)" }}
+              aria-hidden
+            />
             {t.fitness.ctl}
           </span>
           <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-            <span className="size-2 rounded-full" style={{ backgroundColor: "var(--chart-3)" }} aria-hidden />
+            <span
+              className="size-2 rounded-full"
+              style={{ backgroundColor: "var(--chart-3)" }}
+              aria-hidden
+            />
             {t.fitness.atl}
           </span>
           <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-            <span className="size-2 rounded-full" style={{ backgroundColor: "var(--chart-4)" }} aria-hidden />
+            <span
+              className="size-2 rounded-full"
+              style={{ backgroundColor: "var(--chart-4)" }}
+              aria-hidden
+            />
             {t.fitness.tsb}
           </span>
         </div>
@@ -144,41 +180,138 @@ export function PmcChart({ points, weekly }: { points: PmcSeriesPoint[]; weekly:
             width="100%"
             style={{ height: "auto", touchAction: "none" }}
             role="img"
+            tabIndex={0}
             aria-label={t.fitness.title}
             onPointerMove={onMove}
             onPointerDown={onMove}
             onPointerLeave={() => setHover(null)}
+            onKeyDown={onKey}
+            className="outline-none"
           >
             {/* main panel frame + load ticks */}
-            <line x1={PAD_L} y1={TOP} x2={VBW - PAD_R} y2={TOP} stroke="var(--border)" strokeWidth={1} opacity={0.5} />
-            <line x1={PAD_L} y1={MAIN_BOTTOM} x2={VBW - PAD_R} y2={MAIN_BOTTOM} stroke="var(--border)" strokeWidth={1} />
-            <text x={PAD_L - 6} y={TOP + 4} textAnchor="end" fontSize={9} fill="var(--muted-foreground)" className="font-mono">
+            <line
+              x1={PAD_L}
+              y1={TOP}
+              x2={VBW - PAD_R}
+              y2={TOP}
+              stroke="var(--border)"
+              strokeWidth={1}
+              opacity={0.5}
+            />
+            <line
+              x1={PAD_L}
+              y1={MAIN_BOTTOM}
+              x2={VBW - PAD_R}
+              y2={MAIN_BOTTOM}
+              stroke="var(--border)"
+              strokeWidth={1}
+            />
+            <text
+              x={PAD_L - 6}
+              y={TOP + 4}
+              textAnchor="end"
+              fontSize={9}
+              fill="var(--muted-foreground)"
+              className="font-mono"
+            >
               {loadMax}
             </text>
-            <text x={PAD_L - 6} y={MAIN_BOTTOM} textAnchor="end" fontSize={9} fill="var(--muted-foreground)" className="font-mono">
+            <text
+              x={PAD_L - 6}
+              y={MAIN_BOTTOM}
+              textAnchor="end"
+              fontSize={9}
+              fill="var(--muted-foreground)"
+              className="font-mono"
+            >
               0
             </text>
 
             {ctlArea ? <path d={ctlArea} fill="var(--primary)" opacity={0.14} /> : null}
-            {atlLine ? <path d={atlLine} fill="none" stroke="var(--chart-3)" strokeWidth={1.75} strokeLinejoin="round" strokeLinecap="round" /> : null}
-            {ctlLine ? <path d={ctlLine} fill="none" stroke="var(--primary)" strokeWidth={2.25} strokeLinejoin="round" strokeLinecap="round" /> : null}
+            {atlLine ? (
+              <path
+                d={atlLine}
+                fill="none"
+                stroke="var(--chart-3)"
+                strokeWidth={1.75}
+                strokeLinejoin="round"
+                strokeLinecap="round"
+              />
+            ) : null}
+            {ctlLine ? (
+              <path
+                d={ctlLine}
+                fill="none"
+                stroke="var(--primary)"
+                strokeWidth={2.25}
+                strokeLinejoin="round"
+                strokeLinecap="round"
+              />
+            ) : null}
 
             {/* TSB band: zero baseline + line + subtle area */}
-            <line x1={PAD_L} y1={TSB_MID} x2={VBW - PAD_R} y2={TSB_MID} stroke="var(--border)" strokeWidth={1} strokeDasharray="3 3" opacity={0.7} />
-            <text x={PAD_L - 6} y={TSB_TOP + 4} textAnchor="end" fontSize={9} fill="var(--muted-foreground)" className="font-mono">
+            <line
+              x1={PAD_L}
+              y1={TSB_MID}
+              x2={VBW - PAD_R}
+              y2={TSB_MID}
+              stroke="var(--border)"
+              strokeWidth={1}
+              strokeDasharray="3 3"
+              opacity={0.7}
+            />
+            <text
+              x={PAD_L - 6}
+              y={TSB_TOP + 4}
+              textAnchor="end"
+              fontSize={9}
+              fill="var(--muted-foreground)"
+              className="font-mono"
+            >
               +{tsbMax}
             </text>
-            <text x={PAD_L - 6} y={TSB_TOP + TSB_H} textAnchor="end" fontSize={9} fill="var(--muted-foreground)" className="font-mono">
+            <text
+              x={PAD_L - 6}
+              y={TSB_TOP + TSB_H}
+              textAnchor="end"
+              fontSize={9}
+              fill="var(--muted-foreground)"
+              className="font-mono"
+            >
               -{tsbMax}
             </text>
             {tsbArea ? <path d={tsbArea} fill="var(--chart-4)" opacity={0.1} /> : null}
-            {tsbLine ? <path d={tsbLine} fill="none" stroke="var(--chart-4)" strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" /> : null}
+            {tsbLine ? (
+              <path
+                d={tsbLine}
+                fill="none"
+                stroke="var(--chart-4)"
+                strokeWidth={1.5}
+                strokeLinejoin="round"
+                strokeLinecap="round"
+              />
+            ) : null}
 
             {/* x-axis ticks */}
             {ticks.map((tick) => (
               <g key={tick.i}>
-                <line x1={xPx(tick.i)} y1={TOP} x2={xPx(tick.i)} y2={TSB_TOP + TSB_H} stroke="var(--border)" strokeWidth={1} opacity={0.2} />
-                <text x={xPx(tick.i)} y={TSB_TOP + TSB_H + 15} textAnchor="middle" fontSize={9} fill="var(--muted-foreground)" className="font-mono">
+                <line
+                  x1={xPx(tick.i)}
+                  y1={TOP}
+                  x2={xPx(tick.i)}
+                  y2={TSB_TOP + TSB_H}
+                  stroke="var(--border)"
+                  strokeWidth={1}
+                  opacity={0.2}
+                />
+                <text
+                  x={xPx(tick.i)}
+                  y={TSB_TOP + TSB_H + 15}
+                  textAnchor="middle"
+                  fontSize={9}
+                  fill="var(--muted-foreground)"
+                  className="font-mono"
+                >
                   {tick.label}
                 </text>
               </g>
@@ -187,10 +320,40 @@ export function PmcChart({ points, weekly }: { points: PmcSeriesPoint[]; weekly:
             {/* crosshair + markers */}
             {hoverX != null && hoverPoint != null ? (
               <>
-                <line x1={hoverX} y1={TOP} x2={hoverX} y2={TSB_TOP + TSB_H} stroke="var(--foreground)" strokeWidth={1} opacity={0.35} pointerEvents="none" />
-                <circle cx={hoverX} cy={yLoad(hoverPoint.ctl)} r={3.5} fill="var(--primary)" stroke="var(--card)" strokeWidth={1.5} />
-                <circle cx={hoverX} cy={yLoad(hoverPoint.atl)} r={3} fill="var(--chart-3)" stroke="var(--card)" strokeWidth={1.5} />
-                <circle cx={hoverX} cy={yTsb(hoverPoint.tsb)} r={3} fill="var(--chart-4)" stroke="var(--card)" strokeWidth={1.5} />
+                <line
+                  x1={hoverX}
+                  y1={TOP}
+                  x2={hoverX}
+                  y2={TSB_TOP + TSB_H}
+                  stroke="var(--foreground)"
+                  strokeWidth={1}
+                  opacity={0.35}
+                  pointerEvents="none"
+                />
+                <circle
+                  cx={hoverX}
+                  cy={yLoad(hoverPoint.ctl)}
+                  r={3.5}
+                  fill="var(--primary)"
+                  stroke="var(--card)"
+                  strokeWidth={1.5}
+                />
+                <circle
+                  cx={hoverX}
+                  cy={yLoad(hoverPoint.atl)}
+                  r={3}
+                  fill="var(--chart-3)"
+                  stroke="var(--card)"
+                  strokeWidth={1.5}
+                />
+                <circle
+                  cx={hoverX}
+                  cy={yTsb(hoverPoint.tsb)}
+                  r={3}
+                  fill="var(--chart-4)"
+                  stroke="var(--card)"
+                  strokeWidth={1.5}
+                />
               </>
             ) : null}
           </svg>
@@ -208,13 +371,29 @@ export function PmcChart({ points, weekly }: { points: PmcSeriesPoint[]; weekly:
               </div>
               <div className="space-y-0.5">
                 {[
-                  { label: t.fitness.ctl, value: Math.round(hoverPoint.ctl), color: "var(--primary)" },
-                  { label: t.fitness.atl, value: Math.round(hoverPoint.atl), color: "var(--chart-3)" },
-                  { label: t.fitness.tsb, value: Math.round(hoverPoint.tsb), color: "var(--chart-4)" },
+                  {
+                    label: t.fitness.ctl,
+                    value: Math.round(hoverPoint.ctl),
+                    color: "var(--primary)",
+                  },
+                  {
+                    label: t.fitness.atl,
+                    value: Math.round(hoverPoint.atl),
+                    color: "var(--chart-3)",
+                  },
+                  {
+                    label: t.fitness.tsb,
+                    value: Math.round(hoverPoint.tsb),
+                    color: "var(--chart-4)",
+                  },
                 ].map((row) => (
                   <div key={row.label} className="flex items-center justify-between gap-3">
                     <span className="flex items-center gap-1.5 text-muted-foreground">
-                      <span className="size-2 rounded-full" style={{ backgroundColor: row.color }} aria-hidden />
+                      <span
+                        className="size-2 rounded-full"
+                        style={{ backgroundColor: row.color }}
+                        aria-hidden
+                      />
                       {row.label}
                     </span>
                     <span className="font-mono tabular-nums" style={{ color: row.color }}>
@@ -234,16 +413,45 @@ export function PmcChart({ points, weekly }: { points: PmcSeriesPoint[]; weekly:
             {t.fitness.weeklyLoad}
           </h3>
           <div className="w-full overflow-x-auto">
-            <svg viewBox={`0 0 ${VBW} ${WEEK_H + WEEK_AXIS}`} width="100%" style={{ height: "auto" }} role="img" aria-label={t.fitness.weeklyLoad}>
-              <line x1={PAD_L} y1={WEEK_H} x2={VBW - PAD_R} y2={WEEK_H} stroke="var(--border)" strokeWidth={1} />
-              <text x={PAD_L - 6} y={12} textAnchor="end" fontSize={9} fill="var(--muted-foreground)" className="font-mono">
+            <svg
+              viewBox={`0 0 ${VBW} ${WEEK_H + WEEK_AXIS}`}
+              width="100%"
+              style={{ height: "auto" }}
+              role="img"
+              aria-label={t.fitness.weeklyLoad}
+            >
+              <line
+                x1={PAD_L}
+                y1={WEEK_H}
+                x2={VBW - PAD_R}
+                y2={WEEK_H}
+                stroke="var(--border)"
+                strokeWidth={1}
+              />
+              <text
+                x={PAD_L - 6}
+                y={12}
+                textAnchor="end"
+                fontSize={9}
+                fill="var(--muted-foreground)"
+                className="font-mono"
+              >
                 {weekMax}
               </text>
               {weekly.map((w, i) => {
                 const h = (w.load / weekMax) * (WEEK_H - 4);
                 const x = PAD_L + i * (barW + barGap);
                 return (
-                  <rect key={w.date} x={x} y={WEEK_H - h} width={barW} height={h} rx={1.5} fill="var(--primary)" opacity={0.8}>
+                  <rect
+                    key={w.date}
+                    x={x}
+                    y={WEEK_H - h}
+                    width={barW}
+                    height={h}
+                    rx={1.5}
+                    fill="var(--primary)"
+                    opacity={0.8}
+                  >
                     <title>{`${fmtDayMonth(parseLocalDate(w.date), lang)} · ${Math.round(w.load)} ${t.fitness.tssUnit}`}</title>
                   </rect>
                 );
@@ -251,7 +459,15 @@ export function PmcChart({ points, weekly }: { points: PmcSeriesPoint[]; weekly:
               {weekTicks.map((tick) => {
                 const x = PAD_L + tick.i * (barW + barGap) + barW / 2;
                 return (
-                  <text key={tick.i} x={x} y={WEEK_H + 14} textAnchor="middle" fontSize={9} fill="var(--muted-foreground)" className="font-mono">
+                  <text
+                    key={tick.i}
+                    x={x}
+                    y={WEEK_H + 14}
+                    textAnchor="middle"
+                    fontSize={9}
+                    fill="var(--muted-foreground)"
+                    className="font-mono"
+                  >
                     {tick.label}
                   </text>
                 );

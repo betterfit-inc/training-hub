@@ -1,0 +1,15 @@
+node_modules
+.next
+out
+build
+coverage
+data
+scratchpad
+public
+test-results
+playwright-report
+playwright/.cache
+package-lock.json
+next-env.d.ts
+tsconfig.tsbuildinfo
+*.md

@@ -60,7 +60,11 @@ export default async function RacesPage() {
 
       {races.length === 0 ? (
         <div className="mt-6">
-          <EmptyState icon={MedalIcon} title={t.racesPage.empty} description={t.racesPage.emptyBody} />
+          <EmptyState
+            icon={MedalIcon}
+            title={t.racesPage.empty}
+            description={t.racesPage.emptyBody}
+          />
         </div>
       ) : (
         <div className="mt-6 space-y-8">

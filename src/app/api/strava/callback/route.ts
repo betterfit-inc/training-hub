@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { constantTimeEqual } from "@/lib/crypto";
 import { exchangeCode } from "@/lib/strava";
 
 function settingsRedirect(request: NextRequest, params: string) {
@@ -17,7 +18,7 @@ export async function GET(request: NextRequest) {
   const code = search.get("code");
   const state = search.get("state");
   const expectedState = request.cookies.get("strava_oauth_state")?.value;
-  if (!code || !state || !expectedState || state !== expectedState) {
+  if (!code || !state || !expectedState || !constantTimeEqual(state, expectedState)) {
     return settingsRedirect(request, "error=state");
   }
 

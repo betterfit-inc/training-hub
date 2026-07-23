@@ -71,7 +71,7 @@ function groupByWeek(activities: ActivityWithSplits[], lang: Lang): WeekGroup[] 
  */
 function weekSummary(week: WeekGroup, t: Dict): string {
   const parts: string[] = [];
-  for (const { key } of SPORT_CATEGORIES) {
+  for (const key of SPORT_CATEGORIES) {
     const n = week.count[key] ?? 0;
     if (n === 0) continue;
     const km = week.km[key] ?? 0;
@@ -82,15 +82,7 @@ function weekSummary(week: WeekGroup, t: Dict): string {
   return parts.join(" · ") || `${week.items.length} ${t.words.activities}`;
 }
 
-function ActivityRow({
-  activity,
-  lang,
-  t,
-}: {
-  activity: ActivityWithSplits;
-  lang: Lang;
-  t: Dict;
-}) {
+function ActivityRow({ activity, lang, t }: { activity: ActivityWithSplits; lang: Lang; t: Dict }) {
   const run = isRunSport(activity.sport_type);
   const ride = isRideSport(activity.sport_type);
   const metrics = ride ? rideMetrics(activity) : null;
@@ -116,7 +108,7 @@ function ActivityRow({
         <span className="min-w-0">
           <span className="flex items-center gap-1.5">
             <SportIcon sport={activity.sport_type} className="shrink-0" />
-            {activity.is_race === 1 ? (
+            {activity.is_race ? (
               <MedalIcon className="size-3.5 shrink-0 text-primary" aria-label={t.detail.race} />
             ) : null}
             <span className="truncate text-sm font-medium transition-colors group-hover/row:text-primary">
@@ -194,7 +186,7 @@ export default async function TrainingLogPage({ searchParams }: PageProps<"/">) 
 
   const rawSport = typeof params.sport === "string" ? params.sport : "all";
   const filter: SportCategory | "all" = SPORT_CATEGORIES.some(
-    (c) => c.key === rawSport && (counts.get(c.key) ?? 0) > 0
+    (key) => key === rawSport && (counts.get(key) ?? 0) > 0
   )
     ? (rawSport as SportCategory)
     : "all";
@@ -205,10 +197,10 @@ export default async function TrainingLogPage({ searchParams }: PageProps<"/">) 
       : activities.filter((a) => sportCategory(a.sport_type) === filter);
   const weeks = groupByWeek(visible, lang);
   const totalKm = visible.reduce((acc, a) => acc + (a.distance_km ?? 0), 0);
-  const availableCategories = SPORT_CATEGORIES.filter((c) => (counts.get(c.key) ?? 0) > 0);
+  const availableCategories = SPORT_CATEGORIES.filter((key) => (counts.get(key) ?? 0) > 0);
   const filterLabel = filter === "all" ? null : t.sports[filter].toLowerCase();
   const oldest = visible[visible.length - 1];
-  const oldestDate = oldest ? oldest.started_at ?? oldest.created_at : null;
+  const oldestDate = oldest ? (oldest.started_at ?? oldest.created_at) : null;
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
@@ -254,13 +246,13 @@ export default async function TrainingLogPage({ searchParams }: PageProps<"/">) 
             label={t.log.all}
             count={activities.length}
           />
-          {availableCategories.map((c) => (
+          {availableCategories.map((category) => (
             <FilterPill
-              key={c.key}
-              href={`/?sport=${c.key}`}
-              active={filter === c.key}
-              label={t.sports[c.key]}
-              count={counts.get(c.key) ?? 0}
+              key={category}
+              href={`/?sport=${category}`}
+              active={filter === category}
+              label={t.sports[category]}
+              count={counts.get(category) ?? 0}
             />
           ))}
         </nav>

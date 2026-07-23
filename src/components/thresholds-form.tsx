@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { useI18n } from "@/components/i18n-provider";
 import { saveThresholdsAction } from "@/lib/actions";
 import { fmtPaceShort, parsePace } from "@/lib/format";
+import { parseFiniteNumber } from "@/lib/validate";
 import type { AthleteThresholds } from "@/lib/fitness";
 
 export function ThresholdsForm({ thresholds }: { thresholds: AthleteThresholds }) {
@@ -31,13 +32,23 @@ export function ThresholdsForm({ thresholds }: { thresholds: AthleteThresholds }
       toast.error(`${t.fitness.thresholds.thresholdPace}: mm:ss`);
       return;
     }
+    // Reject blank/non-numeric fields before posting so NaN never reaches the
+    // save action (G6.4). The server re-validates ranges as the trust boundary.
+    const maxHrValue = parseFiniteNumber(maxHr);
+    const restingHrValue = parseFiniteNumber(restingHr);
+    const lthrValue = parseFiniteNumber(lthr);
+    const ftpValue = parseFiniteNumber(ftp);
+    if (maxHrValue === null || restingHrValue === null || lthrValue === null || ftpValue === null) {
+      toast.error(t.errors.invalidThresholds);
+      return;
+    }
     startTransition(async () => {
       const result = await saveThresholdsAction({
-        maxHr: Number(maxHr),
-        restingHr: Number(restingHr),
-        lthr: Number(lthr),
+        maxHr: maxHrValue,
+        restingHr: restingHrValue,
+        lthr: lthrValue,
         thresholdPaceSPerKm: paceSPerKm,
-        ftpW: Number(ftp),
+        ftpW: ftpValue,
         restingHrEstimated: restingEstimated,
         ftpProvisional: ftpProvisional,
       });

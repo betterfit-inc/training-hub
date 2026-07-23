@@ -21,9 +21,11 @@ export interface Insights {
   categories: CategoryStats[];
 }
 
+// started_at is a stored UTC instant, so bucket by its UTC calendar day; local
+// getters would drift the day (and miscount activeDays) with the runtime tz.
 function dayKey(iso: string): string {
   const d = new Date(iso);
-  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+  return `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
 }
 
 /**
@@ -37,7 +39,7 @@ export function computeInsights(activities: Activity[], windowDays: number): Ins
   const allDays = new Set<string>();
   const byCategory = new Map<
     SportCategory,
-    CategoryStats & { days: Set<string> }
+    Omit<CategoryStats, "activeDays"> & { days: Set<string> }
   >();
   let sessions = 0;
   let km = 0;
@@ -54,7 +56,6 @@ export function computeInsights(activities: Activity[], windowDays: number): Ins
       stats = {
         category,
         sessions: 0,
-        activeDays: 0,
         km: 0,
         movingS: 0,
         longestKm: 0,

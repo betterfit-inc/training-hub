@@ -28,26 +28,11 @@ import {
   type StravaLap,
   type StravaSplit,
 } from "@/lib/strava";
-import {
-  fmtCadence,
-  fmtEnergy,
-  fmtPower,
-  fmtSpeed,
-  isRideSport,
-  rideMetrics,
-} from "@/lib/cycling";
-import {
-  fmtDateLong,
-  fmtDuration,
-  fmtElev,
-  fmtHr,
-  fmtKm,
-  fmtPace,
-  fmtTime,
-} from "@/lib/format";
+import { fmtCadence, fmtEnergy, fmtPower, fmtSpeed, isRideSport, rideMetrics } from "@/lib/cycling";
+import { fmtDateLong, fmtDuration, fmtElev, fmtHr, fmtKm, fmtPace, fmtTime } from "@/lib/format";
 import type { Dict } from "@/lib/i18n";
 import { isRunSport } from "@/lib/validate";
-import type { BikeOption, ShoeOption } from "@/lib/types";
+import { toGearOption } from "@/lib/gear";
 
 export async function generateMetadata({ params }: PageProps<"/activity/[id]">) {
   const { id } = await params;
@@ -77,7 +62,8 @@ function fmtLapDist(distanceM?: number): string {
   return fmtKm(distanceM / 1000, distanceM < 99500 ? 2 : 1);
 }
 
-const TH = "px-2 py-1.5 text-left text-[11px] font-medium tracking-wider text-muted-foreground uppercase";
+const TH =
+  "px-2 py-1.5 text-left text-[11px] font-medium tracking-wider text-muted-foreground uppercase";
 const TD = "px-2 py-1.5 font-mono text-sm tabular-nums whitespace-nowrap";
 
 function LapsTable({ laps, t, ride }: { laps: StravaLap[]; t: Dict; ride: boolean }) {
@@ -152,7 +138,7 @@ function KmSplitsTable({ splits, t }: { splits: StravaSplit[]; t: Dict }) {
             return (
               <tr key={index}>
                 <td className={`${TD} text-muted-foreground`}>
-                  {partial ? ((split.distance ?? 0) / 1000).toFixed(1) : split.split ?? index + 1}
+                  {partial ? ((split.distance ?? 0) / 1000).toFixed(1) : (split.split ?? index + 1)}
                 </td>
                 <td className={`${TD} font-medium`}>
                   {Number.isFinite(pace) ? fmtPace(pace) : "–"}
@@ -195,22 +181,8 @@ export default async function ActivityPage({ params }: PageProps<"/activity/[id]
   const ride = isRideSport(activity.sport_type);
   const confirmed = activity.status === "confirmed";
 
-  const shoes: ShoeOption[] = ride
-    ? []
-    : (await listShoes()).map((s) => ({
-        id: s.id,
-        name: s.name,
-        role: s.role,
-        retired: !!s.retired_at,
-      }));
-  const bikes: BikeOption[] = ride
-    ? (await listBikes()).map((b) => ({
-        id: b.id,
-        name: b.name,
-        role: b.role,
-        retired: !!b.retired_at,
-      }))
-    : [];
+  const shoes = ride ? [] : (await listShoes()).map(toGearOption);
+  const bikes = ride ? (await listBikes()).map(toGearOption) : [];
   const metrics = ride ? rideMetrics(activity) : null;
 
   // Training load: the persisted value from backfill, else computed on the fly
@@ -279,7 +251,7 @@ export default async function ActivityPage({ params }: PageProps<"/activity/[id]
         </div>
         <div className="mt-1.5 flex flex-wrap items-center justify-between gap-3">
           <h1 className="flex items-center gap-2 font-display text-3xl font-semibold tracking-tight">
-            {activity.is_race === 1 ? (
+            {activity.is_race ? (
               <MedalIcon className="size-6 shrink-0 text-primary" aria-label={t.detail.race} />
             ) : null}
             {activity.name ?? t.log.untitled}
@@ -300,9 +272,7 @@ export default async function ActivityPage({ params }: PageProps<"/activity/[id]
       </header>
 
       {description ? (
-        <p className="mt-3 text-sm leading-relaxed text-muted-foreground italic">
-          {description}
-        </p>
+        <p className="mt-3 text-sm leading-relaxed text-muted-foreground italic">{description}</p>
       ) : null}
 
       {confirmed ? (
@@ -384,7 +354,7 @@ export default async function ActivityPage({ params }: PageProps<"/activity/[id]
             <CardTitle>{t.chart.analysis}</CardTitle>
           </CardHeader>
           <CardContent>
-            <ActivityChart streams={streams} isRun={run} isRide={ride} />
+            <ActivityChart activityId={activity.id} streams={streams} isRun={run} isRide={ride} />
           </CardContent>
         </Card>
       ) : null}

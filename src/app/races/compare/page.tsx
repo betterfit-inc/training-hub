@@ -30,9 +30,7 @@ function parseId(raw: string | string[] | undefined): number | null {
  * Default selection: the two most-recent races that share a category, halves
  * first; otherwise the two most recent races. `races` is newest-first.
  */
-function defaultPair(
-  races: ActivityWithSplits[]
-): [ActivityWithSplits, ActivityWithSplits] {
+function defaultPair(races: ActivityWithSplits[]): [ActivityWithSplits, ActivityWithSplits] {
   const halves = races.filter((r) => raceCategory(r) === "half");
   if (halves.length >= 2) return [halves[0], halves[1]];
   const seen = new Map<RaceCategory, ActivityWithSplits>();

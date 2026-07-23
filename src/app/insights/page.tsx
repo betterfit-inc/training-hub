@@ -9,16 +9,11 @@ import { computeInsights, type CategoryStats } from "@/lib/insights";
 import { fmtHoursMin, fmtKm, fmtPace } from "@/lib/format";
 import { fill, fillStr, type Dict } from "@/lib/i18n";
 import type { SportCategory } from "@/lib/sports";
+import { timeWindows } from "@/lib/windows";
 
 export const metadata = { title: "Insights" };
 
-const WINDOWS = [
-  { key: "30d", days: 30 },
-  { key: "60d", days: 60 },
-  { key: "90d", days: 90 },
-  { key: "6m", days: 183 },
-  { key: "1y", days: 365 },
-] as const;
+const WINDOWS = timeWindows(["30d", "60d", "90d", "6m", "1y"]);
 
 const CATEGORY_ICON_SPORT: Record<SportCategory, string> = {
   run: "Run",
@@ -151,9 +146,7 @@ function SummaryTile({ label, value, sub }: { label: string; value: string; sub?
       </div>
       <div className="mt-1 font-display text-3xl font-bold">
         {value}
-        {sub ? (
-          <span className="ml-1 text-sm font-normal text-muted-foreground">{sub}</span>
-        ) : null}
+        {sub ? <span className="ml-1 text-sm font-normal text-muted-foreground">{sub}</span> : null}
       </div>
     </div>
   );
@@ -218,8 +211,7 @@ export default async function InsightsPage({ searchParams }: PageProps<"/insight
                     />
                     <h2 className="text-sm font-medium">{t.sports[stats.category]}</h2>
                     <span className="ml-auto font-mono text-xs tabular-nums text-muted-foreground">
-                      {stats.sessions}{" "}
-                      {stats.sessions === 1 ? t.words.session : t.words.sessions}
+                      {stats.sessions} {stats.sessions === 1 ? t.words.session : t.words.sessions}
                     </span>
                   </div>
                   <p className="text-[16px] leading-relaxed text-muted-foreground italic">

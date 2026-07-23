@@ -1,13 +1,13 @@
 import { BikeIcon, HomeIcon, MountainIcon, PencilIcon } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { BikeDialog, RetireBikeButton } from "@/components/bike-dialog";
+import { GearCard } from "@/components/gear-card";
+import { GearDialog, RetireGearButton } from "@/components/gear-dialog";
 import { fmtKm } from "@/lib/format";
 import { fillStr, type Dict } from "@/lib/i18n";
-import { photoSrc } from "@/lib/storage";
 import type { BikeWithMileage, StravaGear } from "@/lib/types";
 
+// Bike specialization of GearCard: the big lifetime distance, ride count, and
+// the indoor/outdoor split breakdown.
 export function BikeCard({
   bike,
   gearOptions,
@@ -21,8 +21,6 @@ export function BikeCard({
   connected: boolean;
   t: Dict;
 }) {
-  const retired = !!bike.retired_at;
-  const photo = photoSrc(bike.photo_path);
   const mountain = (bike.role ?? "").toLowerCase().includes("mount");
   const RoleIcon = mountain ? MountainIcon : BikeIcon;
 
@@ -31,85 +29,58 @@ export function BikeCard({
   const indoorPct = hasBreakdown ? Math.round((bike.indoor_km / tracked) * 100) : 0;
 
   return (
-    <Card className={cn("pt-0", retired && "opacity-80")}>
-      <div
-        className={cn(
-          "relative flex h-44 items-center justify-center overflow-hidden border-b",
-          photo ? "bg-white" : "bg-gradient-to-br from-accent via-muted to-background",
-          retired && "grayscale"
-        )}
-      >
-        {photo ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={photo}
-            alt={bike.name}
-            className="size-full object-contain p-4 mix-blend-multiply transition-transform duration-300 group-hover/card:scale-[1.04]"
-          />
-        ) : (
-          <RoleIcon className="size-10 text-primary/25" aria-hidden />
-        )}
+    <GearCard
+      name={bike.name}
+      role={bike.role}
+      noRoleLabel={t.bikesPage.noRole}
+      roleIcon={RoleIcon}
+      photoPath={bike.photo_path}
+      retired={!!bike.retired_at}
+      fallbackIcon={RoleIcon}
+      contentClassName="space-y-3.5"
+      gearName={gearName}
+      gearLabel={t.bikesPage.gearLabel}
+      editTrigger={
+        <GearDialog kind="bike" gear={bike} gearOptions={gearOptions} connected={connected}>
+          <Button variant="outline" size="sm">
+            <PencilIcon data-icon="inline-start" /> {t.bikesPage.edit}
+          </Button>
+        </GearDialog>
+      }
+      retireButton={<RetireGearButton kind="bike" gear={bike} />}
+    >
+      <div className="flex items-end justify-between gap-2">
+        <div className="flex items-baseline gap-1">
+          <span className="font-display text-4xl leading-none font-bold tracking-tight">
+            {bike.current_km.toFixed(0)}
+          </span>
+          <span className="text-sm font-medium text-muted-foreground">km</span>
+        </div>
+        <span className="font-mono text-xs tabular-nums text-muted-foreground">
+          {fillStr(t.bikesPage.rides, { n: bike.ride_count })}
+        </span>
       </div>
 
-      <CardContent className="space-y-3.5">
-        <div>
-          <h3 className="truncate text-[15px] font-medium" title={bike.name}>
-            {bike.name}
-          </h3>
-          <p className="mt-0.5 flex items-center gap-1 truncate text-[13px] text-muted-foreground italic">
-            <RoleIcon className="size-3.5 shrink-0" aria-hidden />
-            {bike.role ?? t.bikesPage.noRole}
-          </p>
-        </div>
-
-        <div className="flex items-end justify-between gap-2">
-          <div className="flex items-baseline gap-1">
-            <span className="font-display text-4xl leading-none font-bold tracking-tight">
-              {bike.current_km.toFixed(0)}
+      {hasBreakdown ? (
+        <div className="space-y-2">
+          <div className="flex h-2 gap-0.5 overflow-hidden rounded-full">
+            <div className="bg-chart-2" style={{ width: `${indoorPct}%` }} />
+            <div className="flex-1 bg-primary" />
+          </div>
+          <div className="flex items-center justify-between gap-2 font-mono text-xs tabular-nums text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5">
+              <HomeIcon className="size-3 text-chart-2" aria-hidden />
+              {fmtKm(bike.indoor_km, 0)} {t.detail.indoor.toLowerCase()}
             </span>
-            <span className="text-sm font-medium text-muted-foreground">km</span>
+            <span className="inline-flex items-center gap-1.5">
+              <BikeIcon className="size-3 text-primary" aria-hidden />
+              {fmtKm(bike.outdoor_km, 0)} {t.detail.outdoor.toLowerCase()}
+            </span>
           </div>
-          <span className="font-mono text-xs tabular-nums text-muted-foreground">
-            {fillStr(t.bikesPage.rides, { n: bike.ride_count })}
-          </span>
         </div>
-
-        {hasBreakdown ? (
-          <div className="space-y-2">
-            <div className="flex h-2 gap-0.5 overflow-hidden rounded-full">
-              <div className="bg-chart-2" style={{ width: `${indoorPct}%` }} />
-              <div className="flex-1 bg-primary" />
-            </div>
-            <div className="flex items-center justify-between gap-2 font-mono text-xs tabular-nums text-muted-foreground">
-              <span className="inline-flex items-center gap-1.5">
-                <HomeIcon className="size-3 text-chart-2" aria-hidden />
-                {fmtKm(bike.indoor_km, 0)} {t.detail.indoor.toLowerCase()}
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <BikeIcon className="size-3 text-primary" aria-hidden />
-                {fmtKm(bike.outdoor_km, 0)} {t.detail.outdoor.toLowerCase()}
-              </span>
-            </div>
-          </div>
-        ) : (
-          <p className="text-xs text-muted-foreground">{t.bikesPage.lifetime}</p>
-        )}
-
-        {gearName ? (
-          <p className="truncate text-xs text-muted-foreground">
-            {fillStr(t.bikesPage.gearLabel, { name: gearName })}
-          </p>
-        ) : null}
-
-        <div className="flex items-center justify-between border-t pt-3">
-          <BikeDialog bike={bike} gearOptions={gearOptions} connected={connected}>
-            <Button variant="outline" size="sm">
-              <PencilIcon data-icon="inline-start" /> {t.bikesPage.edit}
-            </Button>
-          </BikeDialog>
-          <RetireBikeButton bike={bike} />
-        </div>
-      </CardContent>
-    </Card>
+      ) : (
+        <p className="text-xs text-muted-foreground">{t.bikesPage.lifetime}</p>
+      )}
+    </GearCard>
   );
 }

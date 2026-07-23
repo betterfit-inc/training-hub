@@ -15,7 +15,7 @@ import type { Activity } from "@/lib/types";
 export function RaceControl({ activity }: { activity: Activity }) {
   const router = useRouter();
   const { t } = useI18n();
-  const isRace = activity.is_race === 1;
+  const isRace = activity.is_race;
   const [editing, setEditing] = useState(false);
   const [goal, setGoal] = useState(fmtPaceShort(activity.goal_pace_s_per_km));
   const [pending, startTransition] = useTransition();

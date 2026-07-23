@@ -4,13 +4,44 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { useTheme } from "next-themes";
-import { MoonIcon, SunIcon } from "lucide-react";
+import { LogInIcon, LogOutIcon, MoonIcon, SunIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/components/i18n-provider";
 import { AutoSync, SyncButton } from "@/components/sync-button";
-import { setLangAction } from "@/lib/actions";
+import { logoutAction, setLangAction } from "@/lib/actions";
 import type { Lang } from "@/lib/i18n";
+
+/**
+ * Auth control state passed from the server layout:
+ *  - "disabled": auth is unconfigured (dev/e2e) — show nothing.
+ *  - "out": auth is configured, no valid session — show a Log in link.
+ *  - "in": authenticated owner — show a Log out button (submits logoutAction).
+ */
+export type AuthControl = "disabled" | "in" | "out";
+
+function AuthButton({ state }: { state: AuthControl }) {
+  const { t } = useI18n();
+  if (state === "disabled") return null;
+  if (state === "out") {
+    return (
+      <Button asChild variant="ghost" size="sm">
+        <Link href="/login">
+          <LogInIcon data-icon="inline-start" />
+          {t.login.logIn}
+        </Link>
+      </Button>
+    );
+  }
+  return (
+    <form action={logoutAction}>
+      <Button type="submit" variant="ghost" size="sm">
+        <LogOutIcon data-icon="inline-start" />
+        {t.login.logOut}
+      </Button>
+    </form>
+  );
+}
 
 const NAV = [
   { href: "/", key: "log" },
@@ -80,11 +111,13 @@ export function Header({
   connected,
   configured,
   autoSync,
+  auth,
 }: {
   pendingCount: number;
   connected: boolean;
   configured: boolean;
   autoSync: boolean;
+  auth: AuthControl;
 }) {
   const pathname = usePathname();
   const { t } = useI18n();
@@ -94,16 +127,13 @@ export function Header({
       {autoSync && configured ? <AutoSync /> : null}
       <div className="mx-auto flex h-14 max-w-5xl items-center gap-4 px-4 sm:gap-6 sm:px-6">
         <Link href="/" className="flex shrink-0 items-center gap-1.5">
-          <span className="font-display text-xl font-bold italic tracking-tight">
-            Training Hub
-          </span>
+          <span className="font-display text-xl font-bold italic tracking-tight">Training Hub</span>
           <span aria-hidden className="mt-1.5 inline-block size-1.5 rounded-full bg-primary" />
         </Link>
 
         <nav aria-label="Main" className="flex min-w-0 items-center gap-0.5 text-sm">
           {NAV.map((item) => {
-            const active =
-              item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+            const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
             return (
               <Link
                 key={item.href}
@@ -129,6 +159,7 @@ export function Header({
           <SyncButton connected={connected} />
           <LangToggle />
           <ThemeToggle />
+          <AuthButton state={auth} />
         </div>
       </div>
     </header>

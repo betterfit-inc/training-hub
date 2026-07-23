@@ -1,27 +1,12 @@
-import {
-  CableIcon,
-  CheckCircle2Icon,
-  CircleAlertIcon,
-  KeyRoundIcon,
-} from "lucide-react";
+import { CableIcon, CheckCircle2Icon, CircleAlertIcon, KeyRoundIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { SyncButton } from "@/components/sync-button";
-import {
-  BikeMatcher,
-  DisconnectButton,
-  GearMatcher,
-  ManualActivityForm,
-} from "@/components/settings-forms";
+import { DisconnectButton, GearMatcher, ManualActivityForm } from "@/components/settings-forms";
 import { ThresholdsForm } from "@/components/thresholds-form";
 import { getAthleteThresholds, getMeta, listBikes, listShoes } from "@/lib/db";
+import { toGearOption } from "@/lib/gear";
 import { getDict } from "@/lib/lang";
 import { isStravaConnected, stravaConfigured, tryFetchAllGear } from "@/lib/strava";
 import { fmtDate, fmtDateLong, fmtTime } from "@/lib/format";
@@ -46,9 +31,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
 
   const justConnected = params.connected === "1";
   const errorKey = typeof params.error === "string" ? params.error : null;
-  const errorMessage = errorKey
-    ? t.settingsPage.errors[errorKey] ?? t.errors.generic
-    : null;
+  const errorMessage = errorKey ? (t.settingsPage.errors[errorKey] ?? t.errors.generic) : null;
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
@@ -185,13 +168,8 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
             <CardContent>
               {gear && gear.length > 0 ? (
                 <GearMatcher
-                  shoes={shoes.map((s) => ({
-                    id: s.id,
-                    name: s.name,
-                    role: s.role,
-                    retired: !!s.retired_at,
-                    gearId: s.strava_gear_id,
-                  }))}
+                  kind="shoe"
+                  items={shoes.map((s) => ({ ...toGearOption(s), gearId: s.strava_gear_id }))}
                   gear={gear}
                 />
               ) : (
@@ -211,21 +189,14 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
             </CardHeader>
             <CardContent>
               {bikeGear && bikeGear.length > 0 ? (
-                <BikeMatcher
-                  bikes={bikes.map((b) => ({
-                    id: b.id,
-                    name: b.name,
-                    role: b.role,
-                    retired: !!b.retired_at,
-                    gearId: b.strava_gear_id,
-                  }))}
+                <GearMatcher
+                  kind="bike"
+                  items={bikes.map((b) => ({ ...toGearOption(b), gearId: b.strava_gear_id }))}
                   gear={bikeGear}
                 />
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  {bikeGear === null
-                    ? t.settingsPage.gearLoadFailed
-                    : t.settingsPage.gearScopeHint}
+                  {bikeGear === null ? t.settingsPage.gearLoadFailed : t.settingsPage.gearScopeHint}
                 </p>
               )}
             </CardContent>
@@ -239,14 +210,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
           </CardHeader>
           <CardContent>
             {shoes.length > 0 ? (
-              <ManualActivityForm
-                shoes={shoes.map((s) => ({
-                  id: s.id,
-                  name: s.name,
-                  role: s.role,
-                  retired: !!s.retired_at,
-                }))}
-              />
+              <ManualActivityForm shoes={shoes.map(toGearOption)} />
             ) : (
               <p className="text-sm text-muted-foreground">{t.settingsPage.addShoeFirst}</p>
             )}

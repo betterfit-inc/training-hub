@@ -21,9 +21,11 @@ export interface Insights {
   categories: CategoryStats[];
 }
 
+// started_at is a stored UTC instant, so bucket by its UTC calendar day; local
+// getters would drift the day (and miscount activeDays) with the runtime tz.
 function dayKey(iso: string): string {
   const d = new Date(iso);
-  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+  return `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
 }
 
 /**

@@ -62,6 +62,8 @@ DONE = committed, verify green · SKIPPED = intentionally not done (reason) · B
 
 | T3.5 | NaN guards (id + thresholds) | DONE (SIGN-OFF) | _(this commit)_ | green | **Behavior-changing, labeled (G6.4).** Pure guards `parseId`/`parseFiniteNumber` added to `validate.ts` (7 tests, red pre-fix: helpers didn't exist). `saveShoeAction`/`saveBikeAction` route id through `parseId` → invalid id returns controlled `t.errors.invalidId` instead of silently routing update→create (blank id still = create). `ThresholdsForm` rejects NaN fields before posting (server `saveThresholdsAction` already NaN-guards via `Number.isFinite`). New `invalidId` key (en+pt). **Risk:** malformed id → controlled error not stray create; NaN thresholds rejected. |
 
+| T3.4 | Timezone consistency | DONE (SIGN-OFF) | _(this commit)_ | green | **Behavior-changing, labeled (G14.3, CONFIRMED).** Stored-UTC formatters (`fmtDate`/`fmtDateLong`/`fmtTime`/`fmtDateWithYear`) + `insights.dayKey` now use UTC getters (deterministic, tz-independent); invalid ISO → "–"/"" instead of "undefined NaN undefined". Local wall-clock builders (`localDateInputValue`, `mondayOf`/`weekLabel`, `fmtDayMonth`) left local. Tests set `TZ=Asia/Tokyo` to prove the red day-shift. **Limitation (documented):** true athlete-local time needs Strava `start_date_local` (not stored) — out of scope; `page.tsx` `groupByWeek` week bucketing still tz-drifts (out of file scope). |
+
 **M1 seams checkpoint:** full `npm run verify` (incl. 6 Playwright e2e) re-run by the orchestrator after T1.1–T1.5 — green.
 
 **M0 acceptance met:** `npm run verify` is green on `build/overnight` (independently re-run by the orchestrator, exit 0, incl. 6 Playwright specs), runs against a local sqlite file only, and CI is wired to run it on every PR.

@@ -47,11 +47,15 @@ export function HealthTrendChart({
 }) {
   const { t, lang } = useI18n();
   const label = t.health.metrics[metric];
-  const unit = METRIC_META[metric].unit;
+  // Sleep stages/duration are stored in minutes; show them as hours in the
+  // chart (value label, y-axis and plotted series) so "450min" reads as "7.5h".
+  const isMinutes = METRIC_META[metric].unit === "min";
+  const displayUnit = isMinutes ? "h" : METRIC_META[metric].unit;
 
   const geom = useMemo(() => {
     if (points.length === 0) return null;
-    const values = points.map((p) => p.value);
+    const pts = isMinutes ? points.map((p) => ({ date: p.date, value: p.value / 60 })) : points;
+    const values = pts.map((p) => p.value);
     const m = mean(values);
     const sd = stdDev(values);
     const bandLow = m - sd;
@@ -61,17 +65,17 @@ export function HealthTrendChart({
     const pad = (hi - lo) * 0.1 || 1;
     const yMin = lo - pad;
     const yMax = hi + pad;
-    const n = points.length;
+    const n = pts.length;
 
     const xPx = (i: number) => (n <= 1 ? PAD_L + PLOT_W / 2 : PAD_L + (i / (n - 1)) * PLOT_W);
     const yPx = (v: number) => BOTTOM - ((v - yMin) / (yMax - yMin)) * PLOT_H;
 
-    const line = points
+    const line = pts
       .map((p, i) => `${i ? "L" : "M"}${xPx(i).toFixed(1)},${yPx(p.value).toFixed(1)}`)
       .join(" ");
 
     // 7-day trailing average line.
-    const avg = points.map((_, i) => {
+    const avg = pts.map((_, i) => {
       const from = Math.max(0, i - (AVG_WINDOW - 1));
       return mean(values.slice(from, i + 1));
     });
@@ -82,7 +86,7 @@ export function HealthTrendChart({
     const ticks = Array.from({ length: Math.min(3, n) }, (_, k) => {
       const count = Math.min(3, n);
       const i = count === 1 ? 0 : Math.round((k / (count - 1)) * (n - 1));
-      return { i, label: fmtDayMonth(parseLocalDate(points[i].date), lang) };
+      return { i, label: fmtDayMonth(parseLocalDate(pts[i].date), lang) };
     });
 
     return {
@@ -90,14 +94,14 @@ export function HealthTrendChart({
       avgLine,
       bandTop: yPx(bandHigh),
       bandBottom: yPx(bandLow),
-      last: points[n - 1].value,
+      last: pts[n - 1].value,
       lastX: xPx(n - 1),
-      lastY: yPx(points[n - 1].value),
+      lastY: yPx(pts[n - 1].value),
       yMaxLabel: Math.round(yMax),
       yMinLabel: Math.round(yMin),
       ticks,
     };
-  }, [points, lang]);
+  }, [points, lang, isMinutes]);
 
   return (
     <div className="rounded-xl border bg-card p-3">
@@ -106,7 +110,9 @@ export function HealthTrendChart({
         {geom ? (
           <span className="shrink-0 font-mono text-sm font-semibold tabular-nums">
             {Math.round(geom.last * 10) / 10}
-            {unit ? <span className="ml-0.5 text-[10px] text-muted-foreground">{unit}</span> : null}
+            {displayUnit ? (
+              <span className="ml-0.5 text-[10px] text-muted-foreground">{displayUnit}</span>
+            ) : null}
           </span>
         ) : null}
       </div>

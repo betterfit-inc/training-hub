@@ -9,6 +9,7 @@ export const pt: Dict = {
     health: "Saúde",
     races: "Provas",
     review: "Revisão",
+    gear: "Equip.",
     shoes: "Tênis",
     bikes: "Bikes",
     settings: "Ajustes",
@@ -719,6 +720,20 @@ export const pt: Dict = {
     distanceKm: "Distância (km)",
     shoe: "Tênis",
     addEntry: "Adicionar",
+    garmin: {
+      title: "Garmin",
+      body: "Saúde, sono e VFC diários chegam pelo sync externo, não por login no navegador.",
+      receiving: "Recebendo dados",
+      stale: "Sem dados recentes",
+      never: "Não conectado",
+      lastData: "Último dado {date}",
+      receivingBody:
+        "O sync diário está entregando. Métricas e prontidão aparecem na página Saúde.",
+      staleBody:
+        "Nada novo há mais de um dia — o job do sync pode estar falhando. Veja a execução no GitHub Actions, ou refaça o login.",
+      neverBody:
+        "Ainda sem dados do wearable. Configure o sync (veja services/garmin-sync/README.md), ou use o check-in manual na página Saúde.",
+    },
     errors: {
       denied: "A autorização do Strava foi cancelada.",
       state: "O estado da autorização não confere. Tente conectar de novo.",

@@ -79,6 +79,30 @@ export async function listHealthDates(limit: number): Promise<string[]> {
   return rows.map((r) => r.date);
 }
 
+export interface HealthSourceStatus {
+  /** Most recent local day this source has data for. */
+  lastDate: string;
+  /** When this source last ingested (ISO), or null for rows without it. */
+  lastRecordedAt: string | null;
+  /** Distinct days this source has contributed. */
+  days: number;
+}
+
+/**
+ * Ingest status for one source (garmin/coros/manual), or null when it has never
+ * sent anything. Drives the connectivity indicator in Settings so the athlete
+ * can see whether the daily wearable sync is actually flowing.
+ */
+export async function getHealthSourceStatus(source: string): Promise<HealthSourceStatus | null> {
+  const row = await one<{ lastDate: string | null; lastRecordedAt: string | null; days: number }>(
+    `SELECT MAX(date) AS lastDate, MAX(recorded_at) AS lastRecordedAt, COUNT(DISTINCT date) AS days
+     FROM health_metrics WHERE source = ?`,
+    [source]
+  );
+  if (!row || !row.lastDate) return null;
+  return { lastDate: row.lastDate, lastRecordedAt: row.lastRecordedAt, days: Number(row.days) };
+}
+
 export interface HealthSeriesPoint {
   date: string;
   value: number;

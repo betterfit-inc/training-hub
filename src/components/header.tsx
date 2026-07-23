@@ -52,8 +52,7 @@ const NAV = [
   { href: "/health", key: "health" },
   { href: "/races", key: "races" },
   { href: "/review", key: "review" },
-  { href: "/shoes", key: "shoes" },
-  { href: "/bikes", key: "bikes" },
+  { href: "/gear", key: "gear" },
   { href: "/settings", key: "settings" },
 ] as const;
 

@@ -5,7 +5,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { SyncButton } from "@/components/sync-button";
 import { DisconnectButton, GearMatcher, ManualActivityForm } from "@/components/settings-forms";
 import { ThresholdsForm } from "@/components/thresholds-form";
-import { getAthleteThresholds, getMeta, listBikes, listShoes } from "@/lib/db";
+import {
+  getAthleteThresholds,
+  getHealthSourceStatus,
+  getMeta,
+  listBikes,
+  listShoes,
+} from "@/lib/db";
 import { toGearOption } from "@/lib/gear";
 import { getDict } from "@/lib/lang";
 import { isStravaConnected, stravaConfigured, tryFetchAllGear } from "@/lib/strava";
@@ -28,6 +34,24 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
   const shoes = await listShoes();
   const bikes = await listBikes();
   const thresholds = await getAthleteThresholds();
+
+  // Garmin connectivity: "connected" = the standalone sync delivered health data
+  // recently. There is no browser OAuth for Garmin, so recency of ingested data
+  // is the signal. Stale after ~36h (the job runs daily).
+  const garmin = await getHealthSourceStatus("garmin");
+  const garminStamp = garmin ? (garmin.lastRecordedAt ?? `${garmin.lastDate}T12:00:00`) : null;
+  const garminAgeMs = garminStamp ? new Date().getTime() - new Date(garminStamp).getTime() : null;
+  const garminState = !garmin
+    ? "never"
+    : garminAgeMs != null && garminAgeMs < 36 * 60 * 60 * 1000
+      ? "receiving"
+      : "stale";
+  const garminDot =
+    garminState === "receiving"
+      ? "bg-positive"
+      : garminState === "stale"
+        ? "bg-wear-worn"
+        : "bg-muted-foreground/40";
 
   const justConnected = params.connected === "1";
   const errorKey = typeof params.error === "string" ? params.error : null;
@@ -146,6 +170,32 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
                 {fillStr(t.settingsPage.baselineNote, { date: fmtDateLong(baselineDate, lang) })}
               </p>
             ) : null}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>{t.settingsPage.garmin.title}</CardTitle>
+            <CardDescription>{t.settingsPage.garmin.body}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-sm">
+              <p className="flex items-center gap-2 font-medium">
+                <span aria-hidden className={`size-2 rounded-full ${garminDot}`} />
+                {t.settingsPage.garmin[garminState]}
+                {garmin ? (
+                  <span className="font-normal text-muted-foreground">
+                    ·{" "}
+                    {fillStr(t.settingsPage.garmin.lastData, {
+                      date: fmtDate(garminStamp, lang),
+                    })}
+                  </span>
+                ) : null}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t.settingsPage.garmin[`${garminState}Body` as const]}
+              </p>
+            </div>
           </CardContent>
         </Card>
 

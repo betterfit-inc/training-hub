@@ -5,6 +5,9 @@ build
 coverage
 data
 scratchpad
+**/.venv
+**/__pycache__
+*.local.sh
 public
 test-results
 playwright-report

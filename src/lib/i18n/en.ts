@@ -13,6 +13,7 @@ export const en = {
     health: "Health",
     races: "Races",
     review: "Review",
+    gear: "Gear",
     shoes: "Shoes",
     bikes: "Bikes",
     settings: "Settings",
@@ -726,6 +727,19 @@ export const en = {
     distanceKm: "Distance (km)",
     shoe: "Shoe",
     addEntry: "Add entry",
+    garmin: {
+      title: "Garmin",
+      body: "Daily health, sleep and HRV arrive from the standalone sync, not a browser login.",
+      receiving: "Receiving data",
+      stale: "No recent data",
+      never: "Not connected",
+      lastData: "Last data {date}",
+      receivingBody: "The daily sync is delivering. Metrics and readiness show on the Health page.",
+      staleBody:
+        "Nothing new in over a day — the sync job may be failing. Check the GitHub Actions run, or re-run the login.",
+      neverBody:
+        "No wearable data yet. Set up the sync (see services/garmin-sync/README.md), or just use the manual check-in on the Health page.",
+    },
     errors: {
       denied: "Strava authorization was cancelled.",
       state: "The authorization state did not match. Try connecting again.",

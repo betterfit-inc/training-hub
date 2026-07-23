@@ -135,6 +135,20 @@ export async function syncNowAction(): Promise<SyncActionResult> {
   if (!(await isStravaConnected())) return { ok: false, error: t.errors.notConnected };
   try {
     const result = await syncActivities();
+    // A sync that pulled anything can have added confirmed history (pre-baseline
+    // rows land confirmed) whose training load is not yet computed. Recompute
+    // after the response (G7.3) so the fitness PMC, the recovery fold and recent
+    // sessions reflect the new data without blocking the sync. Errors are logged,
+    // not swallowed; the sync result stands regardless.
+    if (result.imported > 0) {
+      after(async () => {
+        try {
+          await recomputeAllLoads();
+        } catch (error) {
+          logger.error("actions.syncNow.recompute", { error });
+        }
+      });
+    }
     refreshAll();
     return { ok: true, ...result };
   } catch (error) {

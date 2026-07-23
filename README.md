@@ -13,31 +13,24 @@ The core idea: synced activities land in a review queue. Nothing counts toward s
 
 ## Setup
 
-1. Install dependencies:
+The fast path — a guided script creates `.env.local`, helps with the Strava keys, generates the auth and health-ingest secrets, and installs dependencies:
 
-   ```bash
-   npm install
-   ```
+```bash
+npm run setup
+npm run dev
+```
 
-2. Create a Strava API application at [strava.com/settings/api](https://www.strava.com/settings/api):
-   - Application name and website can be anything (for example, `http://localhost:3000`)
-   - Set Authorization Callback Domain to `localhost`
+Then open [http://localhost:3000](http://localhost:3000), go to Settings, press Connect Strava, and after the OAuth flow press Sync and link each shoe to its Strava gear in the Gear matching section.
 
-3. Copy the env file and fill in the two values from the Strava app page:
+<details>
+<summary>Manual setup (what the script does)</summary>
 
-   ```bash
-   cp .env.example .env.local
-   ```
+1. `npm install`
+2. Create a Strava API application at [strava.com/settings/api](https://www.strava.com/settings/api) with Authorization Callback Domain `localhost`.
+3. `cp .env.example .env.local` and fill `STRAVA_CLIENT_ID` / `STRAVA_CLIENT_SECRET`. Optionally set `AUTH_PASSWORD` + `AUTH_SECRET` (owner login) and `HEALTH_INGEST_SECRET` (wearable sync). Everything else lives in SQLite.
+4. `npm run dev`.
 
-   `STRAVA_CLIENT_ID` and `STRAVA_CLIENT_SECRET` are the only environment variables. Tokens and all other state live in SQLite.
-
-4. Run the app:
-
-   ```bash
-   npm run dev
-   ```
-
-5. Open [http://localhost:3000](http://localhost:3000), go to Settings, and press Connect Strava. After the OAuth flow finishes, press Sync and link each shoe to its Strava gear in the Gear matching section.
+</details>
 
 ## Seed data
 
@@ -66,6 +59,18 @@ Shoe mileage is `initial_km` plus the sum of confirmed splits. The baseline migr
 
 To correct mileage later, use the manual adjustment tool in Settings. It creates a manual confirmed activity for a date, distance and shoe; negative distances subtract.
 
+## Health, readiness & recovery
+
+A source-agnostic daily health layer sits alongside the training log. It ingests HRV, sleep, resting HR, stress and more from a wearable, computes an app-owned **readiness** score (0-100) and a global, compounding, intensity-driven **recovery-remaining** countdown, and feeds the AI coach a morning "how ready am I to train" read. The `/health` page shows the metrics, trends, readiness and a manual morning check-in; a live recovery badge sits in the header.
+
+The design is deliberately decoupled from any single device:
+
+- The app only receives already-normalized metrics at `POST /api/health/ingest`, authenticated by a machine token (`HEALTH_INGEST_SECRET`). It never holds wearable credentials.
+- A standalone service, `services/garmin-sync/`, logs in to Garmin, normalizes a trailing window and POSTs it daily via a GitHub Actions cron. Swapping to Coros later is a new adapter, not a core change.
+- Everything degrades gracefully: with no wearable, the manual check-in alone still drives readiness, and readiness/recovery always work from training load.
+
+Setting up the wearable sync is a one-time step (Garmin's first login needs an MFA code): see `services/garmin-sync/README.md`. Settings shows whether Garmin data is currently flowing.
+
 ## Deploying to Vercel
 
 Vercel's filesystem is ephemeral, so the deployed app stores data in Turso (a hosted libSQL/SQLite service) and photos in Vercel Blob. Locally nothing changes: with no `TURSO_DATABASE_URL` set, the app keeps using `data/app.db`.
@@ -87,6 +92,18 @@ Vercel's filesystem is ephemeral, so the deployed app stores data in Turso (a ho
 4. In your Strava API application settings, set the Authorization Callback Domain to the deployed domain (for example `training-hub-psi-one.vercel.app`). Strava allows a single callback domain, so switch it back to `localhost` when you want to reconnect locally, or use a second Strava API app for local development.
 
 5. Redeploy. To keep the app private, enable Deployment Protection in the Vercel project settings.
+
+## One deployment = one athlete (running it for more than one person)
+
+This is a **single-user** app by design: one deployment serves one athlete. Identity resolves to a single owner, and there is one Strava connection, one set of thresholds and gear, and one database. Two people cannot share the same deployment — they would share Strava tokens, gear and health data.
+
+To let a second person use it, give them their **own instance**: the same code, a separate deployment. Nothing in the code needs to change.
+
+- **Share the code, not the data.** Transferring the repo to a GitHub organization is the clean way to share it (GitHub Settings → General → Transfer ownership; it keeps history, issues and PRs and redirects the old URL). No need to duplicate the repo.
+- **Each person deploys their own:** their own Vercel project, their own Turso database, their own Strava API app (own `STRAVA_CLIENT_ID`/`SECRET` and callback domain), their own `AUTH_PASSWORD`/`AUTH_SECRET`, and their own `HEALTH_INGEST_SECRET` + Garmin sync secrets. Run `npm run setup` once per instance.
+- Vercel env vars can be copied between projects (`vercel env pull` / the dashboard), but the per-person secrets (Strava, Garmin, auth) must be each person's own — do not reuse them.
+
+Turning this into a true multi-tenant app (one deployment, many logins, per-user data) is a larger change: the identity seam (`src/lib/identity.ts`) is where it would plug in, and it would need per-user scoping (an `athlete_id` on the data) and per-user Strava/Garmin connections. That is intentionally deferred.
 
 ## Notes
 

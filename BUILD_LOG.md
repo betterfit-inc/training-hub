@@ -50,6 +50,8 @@ DONE = committed, verify green · SKIPPED = intentionally not done (reason) · B
 
 | T2.11 | Query efficiency | DONE | _(this commit)_ | green | `attachSplits` now filters `WHERE activity_id IN (…)` (no whole-table scan); `BIKE_SELECT` computes mileage once via a `GROUP BY` aggregate join (was 4×/row); `recomputeAllLoads` fetches `raw_json` only for ride sports (blob skipped for runs/others — proven identical via 10-case `computeLoad` diff, since only the ride-gated power branch reads it); `countPending` wrapped in React `cache()` so `layout` + `page` share one query per request. All outputs proven byte-identical. |
 
+| T2.9 | i18n tidy | DONE | _(this commit)_ | green | Replaced 7 of 9 `as Record<>` casts with `satisfies Record<Union,string>` (restores key-checking; parity mechanism intact/stronger); 2 kept (runtime numeric/arbitrary-string indexes, justified). `createManualActivityAction` now uses `t.errors.*` (added `zeroDistance`/`pickShoe` to en+pt). `sports.ts` hardcoded labels + `categoryLabel()` were dead duplicates (display already routes through `t.sports`) → removed; dict is now the single label source. No visible change (PT strings already existed). Also narrowed `method` types to `LoadMethod`. |
+
 **M1 seams checkpoint:** full `npm run verify` (incl. 6 Playwright e2e) re-run by the orchestrator after T1.1–T1.5 — green.
 
 **M0 acceptance met:** `npm run verify` is green on `build/overnight` (independently re-run by the orchestrator, exit 0, incl. 6 Playwright specs), runs against a local sqlite file only, and CI is wired to run it on every PR.

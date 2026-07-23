@@ -960,7 +960,7 @@ export async function saveAthleteThresholds(fields: AthleteThresholdFields): Pro
 
 export interface ActivityLoadRow {
   tss: number;
-  method: string | null;
+  method: LoadMethod | null;
   intensity_factor: number | null;
   source: string;
 }

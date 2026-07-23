@@ -1,6 +1,7 @@
 import { Fragment, createElement, type ReactNode } from "react";
 import type { Feeling, WearStatus } from "./types";
 import type { SportCategory } from "./sports";
+import type { RaceCategory } from "./races";
 
 export type Lang = "en" | "pt";
 
@@ -29,20 +30,20 @@ const en = {
     elliptical: "Elliptical",
     swim: "Swim",
     other: "Other",
-  } as Record<SportCategory, string>,
+  } satisfies Record<SportCategory, string>,
   feelings: {
     great: "Great",
     good: "Good",
     ok: "OK",
     rough: "Rough",
     terrible: "Terrible",
-  } as Record<Feeling, string>,
+  } satisfies Record<Feeling, string>,
   wear: {
     fresh: "Fresh",
     worn: "Worn",
     critical: "Critical",
     retired: "Retired",
-  } as Record<WearStatus, string>,
+  } satisfies Record<WearStatus, string>,
   rpeHints: {
     1: "very easy",
     2: "easy",
@@ -54,6 +55,8 @@ const en = {
     8: "very hard",
     9: "near max",
     10: "all out",
+    // Indexed by a runtime RPE `number` (1–10) from RpeControl, so a numeric
+    // index signature is required; the cast stays load-bearing here.
   } as Record<number, string>,
   toasts: {
     newToReview: "{n} new {noun} to review",
@@ -93,6 +96,8 @@ const en = {
     invalidRpe: "RPE must be between 1 and 10.",
     invalidFeeling: "Unknown feeling value.",
     invalidDate: "Pick a valid date.",
+    zeroDistance: "Distance cannot be zero.",
+    pickShoe: "Pick a shoe.",
     invalidThresholds: "Check the threshold values — one is out of a sensible range.",
     invalidLoad: "Load must be zero or more.",
     envMissing: "Set STRAVA_CLIENT_ID and STRAVA_CLIENT_SECRET first (see Settings).",
@@ -368,7 +373,7 @@ const en = {
       "5k": "5K",
       trail: "Trail",
       other: "Race",
-    } as Record<string, string>,
+    } satisfies Record<RaceCategory, string>,
   },
   compare: {
     title: "Race comparison",
@@ -420,7 +425,7 @@ const en = {
       "90d": "90 days",
       "6m": "6 months",
       "1y": "1 year",
-    } as Record<string, string>,
+    } satisfies Record<"30d" | "60d" | "90d" | "6m" | "1y", string>,
     activeDays: "Active days",
     ofWindow: "of {n}",
     sessions: "Sessions",
@@ -469,16 +474,16 @@ const en = {
     load: "Load",
     weeklyLoad: "Weekly load",
     window: "Window",
-    windows: { "90d": "90 days", "6m": "6 months", "1y": "1 year", all: "All" } as Record<
-      string,
+    windows: { "90d": "90 days", "6m": "6 months", "1y": "1 year", all: "All" } satisfies Record<
+      "90d" | "6m" | "1y" | "all",
       string
     >,
     empty: "No training load yet",
     emptyBody:
       "Confirm activities with heart rate, pace, power or RPE and your fitness curve builds here.",
     tssUnit: "TSS",
-    methods: { power: "Power", pace: "Pace", hr: "Heart rate", rpe: "RPE" } as Record<
-      string,
+    methods: { power: "Power", pace: "Pace", hr: "Heart rate", rpe: "RPE" } satisfies Record<
+      "power" | "pace" | "hr" | "rpe",
       string
     >,
     thresholds: {
@@ -549,6 +554,8 @@ const en = {
       state: "The authorization state did not match. Try connecting again.",
       exchange: "Exchanging the authorization code failed. Check your API keys and try again.",
       missing_env: "Set STRAVA_CLIENT_ID and STRAVA_CLIENT_SECRET before connecting.",
+      // Looked up by an arbitrary `error` URL param (with a generic fallback),
+      // so a string index signature is required; the cast stays load-bearing.
     } as Record<string, string>,
   },
 };
@@ -644,6 +651,8 @@ const pt: Dict = {
     invalidRpe: "O RPE deve ficar entre 1 e 10.",
     invalidFeeling: "Sensação desconhecida.",
     invalidDate: "Escolha uma data válida.",
+    zeroDistance: "A distância não pode ser zero.",
+    pickShoe: "Escolha um tênis.",
     invalidThresholds: "Revise os limiares — algum valor está fora de uma faixa razoável.",
     invalidLoad: "A carga deve ser zero ou mais.",
     envMissing: "Defina STRAVA_CLIENT_ID e STRAVA_CLIENT_SECRET primeiro (veja os Ajustes).",

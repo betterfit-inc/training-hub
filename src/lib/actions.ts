@@ -521,8 +521,8 @@ export async function createManualActivityAction(input: {
       return { ok: false, error: t.errors.invalidDate };
     }
     const km = Math.round((Number(input.km) || 0) * 100) / 100;
-    if (km === 0) return { ok: false, error: t.toasts.zeroDistance };
-    if (!(await getShoe(input.shoeId))) return { ok: false, error: t.toasts.pickShoe };
+    if (km === 0) return { ok: false, error: t.errors.zeroDistance };
+    if (!(await getShoe(input.shoeId))) return { ok: false, error: t.errors.pickShoe };
     await createManualActivity({ date: input.date, km, shoe_id: input.shoeId });
     refreshAll();
     return { ok: true };

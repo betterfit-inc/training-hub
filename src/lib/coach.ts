@@ -56,6 +56,39 @@ export interface CoachJournal {
   healthNotes: string | null;
 }
 
+/** One lap/segment of a session (from Strava lap detail), for the coach. */
+export interface LapSummary {
+  km: number | null;
+  timeS: number | null;
+  paceSPerKm: number | null;
+  avgHr: number | null;
+  maxHr: number | null;
+}
+
+/** A recent session the coach can compare the current one against. */
+export interface RecentSessionSummary {
+  date: string | null;
+  name: string | null;
+  distanceKm: number | null;
+  paceSPerKm: number | null;
+  avgHr: number | null;
+  maxHr: number | null;
+  tss: number | null;
+  laps: LapSummary[];
+}
+
+function lapLine(lap: LapSummary, index: number): string {
+  const bits = [
+    lap.km != null ? `${lap.km.toFixed(2)} km` : null,
+    lap.timeS != null ? fmtDuration(lap.timeS) : null,
+    lap.paceSPerKm ? fmtPace(lap.paceSPerKm) : null,
+    lap.avgHr != null
+      ? `HR ${Math.round(lap.avgHr)}${lap.maxHr != null ? `/${Math.round(lap.maxHr)}` : ""}`
+      : null,
+  ].filter(Boolean);
+  return `  L${index + 1}: ${bits.join(", ")}`;
+}
+
 const METHOD_LABEL: Record<string, string> = {
   power: "power",
   pace: "pace",
@@ -111,8 +144,10 @@ export function buildActivityContext(input: {
   journal: CoachJournal;
   goals: Goal[];
   zones: DerivedZones | null;
+  laps: LapSummary[];
+  recent: RecentSessionSummary[];
 }): string {
-  const { activity, load, thresholds, pmc, streams, journal, goals, zones } = input;
+  const { activity, load, thresholds, pmc, streams, journal, goals, zones, laps, recent } = input;
   const lines: string[] = [];
 
   lines.push("WORKOUT");
@@ -209,6 +244,31 @@ export function buildActivityContext(input: {
           ? `${z.paceMinSPerKm ? fmtPace(z.paceMinSPerKm) : ""}-${z.paceMaxSPerKm ? fmtPace(z.paceMaxSPerKm) : ""}`
           : "";
       lines.push(`- Z${z.zone}: ${[hr, pace].filter(Boolean).join(" · ")}`);
+    }
+  }
+
+  if (laps.length > 1) {
+    lines.push("");
+    lines.push("THIS SESSION'S LAPS (per segment)");
+    laps.forEach((lap, i) => lines.push(lapLine(lap, i)));
+  }
+
+  if (recent.length > 0) {
+    lines.push("");
+    lines.push("RECENT SESSIONS, SAME SPORT (for comparison; most recent first)");
+    for (const s of recent) {
+      const meta = [
+        s.distanceKm != null ? fmtKm(s.distanceKm, 1) : null,
+        s.paceSPerKm ? fmtPace(s.paceSPerKm) : null,
+        s.avgHr != null
+          ? `avg HR ${Math.round(s.avgHr)}${s.maxHr != null ? `/${Math.round(s.maxHr)} max` : ""}`
+          : null,
+        s.tss != null ? `${Math.round(s.tss)} TSS` : null,
+      ].filter(Boolean);
+      lines.push(
+        `- ${fmtDateLong(s.date)} · ${s.name ?? "session"}${meta.length ? ` — ${meta.join(", ")}` : ""}`
+      );
+      s.laps.forEach((lap, i) => lines.push(lapLine(lap, i)));
     }
   }
 
@@ -586,46 +646,19 @@ export async function deriveZones(context: string): Promise<Omit<DerivedZones, "
 // similar past sessions and the athlete's health/goals, shown above the chat.
 // ---------------------------------------------------------------------------
 
-export interface SimilarSession {
-  date: string | null;
-  name: string | null;
-  distanceKm: number | null;
-  paceSPerKm: number | null;
-  avgHr: number | null;
-  tss: number | null;
-}
-
 export function buildInsightContext(input: {
   activityContext: string;
-  similar: SimilarSession[];
   healthNote: string | null;
 }): string {
-  const { activityContext, similar, healthNote } = input;
-  const lines = [activityContext, ""];
-
-  lines.push("SIMILAR RECENT SESSIONS (same sport, comparable distance, before this one)");
-  if (similar.length === 0) {
-    lines.push("- None on record to compare against.");
-  } else {
-    for (const s of similar) {
-      const bits = [
-        s.distanceKm != null ? fmtKm(s.distanceKm, 1) : null,
-        s.paceSPerKm ? fmtPace(s.paceSPerKm) : null,
-        s.avgHr ? fmtHr(s.avgHr) : null,
-        s.tss != null ? `${Math.round(s.tss)} TSS` : null,
-      ].filter(Boolean);
-      lines.push(
-        `- ${fmtDateLong(s.date)}: ${s.name ?? "session"}${bits.length ? ` — ${bits.join(", ")}` : ""}`
-      );
-    }
-  }
-
+  // The activity context already carries the recent same-sport sessions (with
+  // laps) for comparison; the insight just adds the day's health.
+  const { activityContext, healthNote } = input;
+  const lines = [activityContext];
   if (healthNote) {
     lines.push("");
     lines.push("HEALTH AROUND THIS DAY");
     lines.push(healthNote);
   }
-
   return lines.join("\n");
 }
 

@@ -49,7 +49,7 @@ import {
   getRunningFieldSignals,
   setTrainingZones,
   getTrainingZones,
-  listSimilarActivities,
+  listRecentSessionsWithDetail,
   setActivityInsight,
   type BikeFields,
   type ShoeFields,
@@ -74,10 +74,13 @@ import {
   type CoachLoad,
   type CoachReadiness,
   type CoachStreamSummary,
+  type LapSummary,
+  type RecentSessionSummary,
 } from "./coach";
 import { computeLoad, THRESHOLD_PACE_RANGE } from "./fitness";
 import {
   ensureActivityStreams,
+  parseActivityDetail,
   stravaConfigured,
   isStravaConnected,
   syncActivities,
@@ -97,7 +100,13 @@ import {
   refreshAll,
 } from "./action-helpers";
 import type { DerivedZones } from "./zones";
-import type { Feeling, HealthMetric, HealthMetricRow, SplitInput } from "./types";
+import type {
+  ActivityWithSplits,
+  Feeling,
+  HealthMetric,
+  HealthMetricRow,
+  SplitInput,
+} from "./types";
 
 // ---------------------------------------------------------------------------
 // Language
@@ -670,6 +679,97 @@ export type WeeklyDigestResult =
 // this is generous headroom, not the expected size).
 const COACH_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 
+/** Map cached Strava lap detail to the coach's compact lap summaries. */
+function toLapSummaries(detailJson: string | null): LapSummary[] {
+  const laps = parseActivityDetail(detailJson)?.laps ?? [];
+  return laps.slice(0, 14).map((l) => ({
+    km: l.distance != null ? l.distance / 1000 : null,
+    timeS: l.moving_time ?? null,
+    paceSPerKm: l.average_speed
+      ? 1000 / l.average_speed
+      : l.distance && l.moving_time
+        ? l.moving_time / (l.distance / 1000)
+        : null,
+    avgHr: l.average_heartrate ?? null,
+    maxHr: l.max_heartrate ?? null,
+  }));
+}
+
+/**
+ * Full coach context for one activity: its metrics + load + PMC + streams +
+ * journal + goals + zones, PLUS this session's laps and the recent same-sport
+ * sessions (with their laps) so the chat can compare across days and per-lap.
+ * Shared by the chat and the insight so both see the same picture.
+ */
+async function assembleActivityContext(activity: ActivityWithSplits): Promise<string> {
+  const thresholds = await getAthleteThresholds();
+  const stored = await getActivityLoad(activity.id);
+  let load: CoachLoad | null = null;
+  if (stored) {
+    load = { tss: stored.tss, method: stored.method, intensityFactor: stored.intensity_factor };
+  } else {
+    const computed = computeLoad(activity, thresholds);
+    if (computed) {
+      load = {
+        tss: computed.tss,
+        method: computed.method,
+        intensityFactor: computed.intensityFactor,
+      };
+    }
+  }
+
+  // Streams are cached after the first view; only a cold activity fetches here.
+  let streams: CoachStreamSummary | null = null;
+  try {
+    const raw = await ensureActivityStreams(activity);
+    if (raw) streams = summarizeStreams(raw);
+  } catch {
+    streams = null;
+  }
+
+  const [pmc, goals, zones, recentRows] = await Promise.all([
+    buildPmc(),
+    listGoals(),
+    getTrainingZones(),
+    listRecentSessionsWithDetail({
+      excludeId: activity.id,
+      sportType: activity.sport_type,
+      before: activity.started_at,
+      days: 21,
+      limit: 6,
+    }),
+  ]);
+
+  const recent: RecentSessionSummary[] = recentRows.map((r) => ({
+    date: r.started_at,
+    name: r.name,
+    distanceKm: r.distance_km,
+    paceSPerKm: r.avg_pace_s_per_km,
+    avgHr: r.avg_hr,
+    maxHr: parseActivityDetail(r.detail_json)?.max_heartrate ?? null,
+    tss: r.tss,
+    laps: toLapSummaries(r.detail_json),
+  }));
+
+  return buildActivityContext({
+    activity,
+    load,
+    thresholds,
+    pmc: pmcPoint(pmc[pmc.length - 1]),
+    streams,
+    journal: {
+      rpe: activity.rpe,
+      feeling: activity.feeling,
+      workoutNotes: activity.workout_notes,
+      healthNotes: activity.health_notes,
+    },
+    goals,
+    zones,
+    laps: toLapSummaries(activity.detail_json),
+    recent,
+  });
+}
+
 export async function sendCoachMessageAction(input: {
   activityId: number;
   message: string;
@@ -707,52 +807,7 @@ export async function sendCoachMessageAction(input: {
     const activity = await getActivity(input.activityId);
     if (!activity) return { ok: false, error: t.errors.activityNotFound };
 
-    const thresholds = await getAthleteThresholds();
-
-    const stored = await getActivityLoad(activity.id);
-    let load: CoachLoad | null = null;
-    if (stored) {
-      load = { tss: stored.tss, method: stored.method, intensityFactor: stored.intensity_factor };
-    } else {
-      const computed = computeLoad(activity, thresholds);
-      if (computed) {
-        load = {
-          tss: computed.tss,
-          method: computed.method,
-          intensityFactor: computed.intensityFactor,
-        };
-      }
-    }
-
-    const pmc = await buildPmc();
-    const todayPmc = pmcPoint(pmc[pmc.length - 1]);
-
-    // Cheap: streams are cached in the DB after the first activity view; only a
-    // cold, never-viewed activity would fetch from Strava here.
-    let streams: CoachStreamSummary | null = null;
-    try {
-      const raw = await ensureActivityStreams(activity);
-      if (raw) streams = summarizeStreams(raw);
-    } catch {
-      streams = null;
-    }
-
-    const [goals, zones] = await Promise.all([listGoals(), getTrainingZones()]);
-    const context = buildActivityContext({
-      activity,
-      load,
-      thresholds,
-      pmc: todayPmc,
-      streams,
-      journal: {
-        rpe: activity.rpe,
-        feeling: activity.feeling,
-        workoutNotes: activity.workout_notes,
-        healthNotes: activity.health_notes,
-      },
-      goals,
-      zones,
-    });
+    const context = await assembleActivityContext(activity);
 
     const history = (await listActivityChat(activity.id)).map((row) => ({
       role: row.role === "assistant" ? ("assistant" as const) : ("user" as const),
@@ -1070,52 +1125,7 @@ export async function generateActivityInsightAction(activityId: number): Promise
     const activity = await getActivity(activityId);
     if (!activity) return { ok: false, error: t.errors.activityNotFound };
 
-    const thresholds = await getAthleteThresholds();
-    const stored = await getActivityLoad(activity.id);
-    let load: CoachLoad | null = null;
-    if (stored) {
-      load = { tss: stored.tss, method: stored.method, intensityFactor: stored.intensity_factor };
-    } else {
-      const computed = computeLoad(activity, thresholds);
-      if (computed) {
-        load = {
-          tss: computed.tss,
-          method: computed.method,
-          intensityFactor: computed.intensityFactor,
-        };
-      }
-    }
-
-    let streams: CoachStreamSummary | null = null;
-    try {
-      const raw = await ensureActivityStreams(activity);
-      if (raw) streams = summarizeStreams(raw);
-    } catch {
-      streams = null;
-    }
-
-    const [pmc, goals, zones, similar] = await Promise.all([
-      buildPmc(),
-      listGoals(),
-      getTrainingZones(),
-      listSimilarActivities(activity),
-    ]);
-
-    const activityContext = buildActivityContext({
-      activity,
-      load,
-      thresholds,
-      pmc: pmcPoint(pmc[pmc.length - 1]),
-      streams,
-      journal: {
-        rpe: activity.rpe,
-        feeling: activity.feeling,
-        workoutNotes: activity.workout_notes,
-        healthNotes: activity.health_notes,
-      },
-      goals,
-      zones,
-    });
+    const activityContext = await assembleActivityContext(activity);
 
     // Health around the day of the workout, when we have it.
     const day = (activity.started_at_local ?? activity.started_at)?.slice(0, 10) ?? null;
@@ -1134,16 +1144,7 @@ export async function generateActivityInsightAction(activityId: number): Promise
       if (parts.length > 0) healthNote = parts.join(", ");
     }
 
-    const similarSessions = similar.map((s) => ({
-      date: s.date,
-      name: s.name,
-      distanceKm: s.distance_km,
-      paceSPerKm: s.avg_pace_s_per_km,
-      avgHr: s.avg_hr,
-      tss: s.tss,
-    }));
-
-    const context = buildInsightContext({ activityContext, similar: similarSessions, healthNote });
+    const context = buildInsightContext({ activityContext, healthNote });
     const text = await runActivityInsight(context);
     await setActivityInsight(activity.id, text);
     refreshAll();

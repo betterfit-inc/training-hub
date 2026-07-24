@@ -221,30 +221,34 @@ export async function updateActivityJournal(id: number, journal: JournalFields):
   );
 }
 
-export interface SimilarActivity {
-  date: string;
+export interface RecentSessionRow {
+  id: number;
+  started_at: string | null;
   name: string | null;
+  sport_type: string | null;
   distance_km: number | null;
-  avg_pace_s_per_km: number | null;
+  moving_time_s: number | null;
   avg_hr: number | null;
+  avg_pace_s_per_km: number | null;
   tss: number | null;
+  detail_json: string | null;
 }
 
 /**
- * Recent confirmed sessions like a given one (same sport, comparable distance),
- * for the insight to compare against. Excludes the activity itself and anything
- * after it, so a past workout's insight only looks at what preceded it.
+ * Recent confirmed sessions of the same sport (excluding a given one and
+ * anything after it), with their cached Strava lap detail, so the coach chat can
+ * compare across days ("vs last Thursday") and per-lap, not just session-wide.
  */
-export async function listSimilarActivities(activity: {
-  id: number;
-  sport_type: string | null;
-  distance_km: number | null;
-  started_at: string | null;
-}): Promise<SimilarActivity[]> {
-  const lo = activity.distance_km != null ? activity.distance_km * 0.75 : null;
-  const hi = activity.distance_km != null ? activity.distance_km * 1.25 : null;
-  return many<SimilarActivity>(
-    `SELECT a.started_at AS date, a.name, a.distance_km, a.avg_pace_s_per_km, a.avg_hr, l.tss
+export async function listRecentSessionsWithDetail(input: {
+  excludeId: number;
+  sportType: string | null;
+  before: string | null;
+  days: number;
+  limit: number;
+}): Promise<RecentSessionRow[]> {
+  return many<RecentSessionRow>(
+    `SELECT a.id, a.started_at, a.name, a.sport_type, a.distance_km, a.moving_time_s,
+            a.avg_hr, a.avg_pace_s_per_km, a.detail_json, l.tss
      FROM activities a
      LEFT JOIN activity_load l ON l.activity_id = a.id
      WHERE a.status = 'confirmed'
@@ -252,17 +256,16 @@ export async function listSimilarActivities(activity: {
        AND LOWER(COALESCE(a.sport_type,'')) = LOWER(COALESCE(?, ''))
        AND a.started_at IS NOT NULL
        AND (? IS NULL OR a.started_at < ?)
-       AND (? IS NULL OR (a.distance_km >= ? AND a.distance_km <= ?))
+       AND a.started_at >= datetime('now', ?)
      ORDER BY a.started_at DESC
-     LIMIT 6`,
+     LIMIT ?`,
     [
-      activity.id,
-      activity.sport_type,
-      activity.started_at,
-      activity.started_at,
-      lo,
-      lo ?? 0,
-      hi ?? 0,
+      input.excludeId,
+      input.sportType,
+      input.before,
+      input.before,
+      `-${input.days} days`,
+      input.limit,
     ]
   );
 }

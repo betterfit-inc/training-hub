@@ -681,10 +681,14 @@ export type WeeklyDigestResult =
 // this is generous headroom, not the expected size).
 const COACH_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 
-/** Map Strava lap detail to the coach's compact lap summaries. */
-function mapLaps(detail: StravaActivityDetail | null): LapSummary[] {
+/**
+ * Map Strava lap detail to the coach's compact lap summaries. `cap` guards
+ * against a pathological auto-lap-every-100m file, but is high enough to keep
+ * every rep of a real interval session (warmup + reps + recoveries + cooldown).
+ */
+function mapLaps(detail: StravaActivityDetail | null, cap = 60): LapSummary[] {
   const laps = detail?.laps ?? [];
-  return laps.slice(0, 14).map((l) => ({
+  return laps.slice(0, cap).map((l) => ({
     km: l.distance != null ? l.distance / 1000 : null,
     timeS: l.moving_time ?? null,
     paceSPerKm: l.average_speed
@@ -738,7 +742,7 @@ async function assembleActivityContext(activity: ActivityWithSplits): Promise<st
       sportType: activity.sport_type,
       before: activity.started_at,
       days: 21,
-      limit: 6,
+      limit: 4,
     }),
   ]);
 
@@ -764,7 +768,7 @@ async function assembleActivityContext(activity: ActivityWithSplits): Promise<st
         avgHr: r.avg_hr,
         maxHr: detail?.max_heartrate ?? null,
         tss: r.tss,
-        laps: mapLaps(detail),
+        laps: mapLaps(detail, 40),
       };
     })
   );

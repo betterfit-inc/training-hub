@@ -223,6 +223,7 @@ export async function updateActivityJournal(id: number, journal: JournalFields):
 
 export interface RecentSessionRow {
   id: number;
+  strava_id: number | null;
   started_at: string | null;
   name: string | null;
   sport_type: string | null;
@@ -247,7 +248,7 @@ export async function listRecentSessionsWithDetail(input: {
   limit: number;
 }): Promise<RecentSessionRow[]> {
   return many<RecentSessionRow>(
-    `SELECT a.id, a.started_at, a.name, a.sport_type, a.distance_km, a.moving_time_s,
+    `SELECT a.id, a.strava_id, a.started_at, a.name, a.sport_type, a.distance_km, a.moving_time_s,
             a.avg_hr, a.avg_pace_s_per_km, a.detail_json, l.tss
      FROM activities a
      LEFT JOIN activity_load l ON l.activity_id = a.id

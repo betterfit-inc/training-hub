@@ -80,10 +80,12 @@ import {
 import { computeLoad, THRESHOLD_PACE_RANGE } from "./fitness";
 import {
   ensureActivityStreams,
+  ensureActivityDetail,
   parseActivityDetail,
   stravaConfigured,
   isStravaConnected,
   syncActivities,
+  type StravaActivityDetail,
   type SyncResult,
 } from "./strava";
 import { parseFiniteNumber, parseId, validateSplits } from "./validate";
@@ -679,9 +681,9 @@ export type WeeklyDigestResult =
 // this is generous headroom, not the expected size).
 const COACH_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 
-/** Map cached Strava lap detail to the coach's compact lap summaries. */
-function toLapSummaries(detailJson: string | null): LapSummary[] {
-  const laps = parseActivityDetail(detailJson)?.laps ?? [];
+/** Map Strava lap detail to the coach's compact lap summaries. */
+function mapLaps(detail: StravaActivityDetail | null): LapSummary[] {
+  const laps = detail?.laps ?? [];
   return laps.slice(0, 14).map((l) => ({
     km: l.distance != null ? l.distance / 1000 : null,
     timeS: l.moving_time ?? null,
@@ -740,16 +742,32 @@ async function assembleActivityContext(activity: ActivityWithSplits): Promise<st
     }),
   ]);
 
-  const recent: RecentSessionSummary[] = recentRows.map((r) => ({
-    date: r.started_at,
-    name: r.name,
-    distanceKm: r.distance_km,
-    paceSPerKm: r.avg_pace_s_per_km,
-    avgHr: r.avg_hr,
-    maxHr: parseActivityDetail(r.detail_json)?.max_heartrate ?? null,
-    tss: r.tss,
-    laps: toLapSummaries(r.detail_json),
-  }));
+  // Fetch each recent session's lap detail (cached after the first fetch), so
+  // per-lap comparison works even for sessions never opened in the app.
+  const recent: RecentSessionSummary[] = await Promise.all(
+    recentRows.map(async (r) => {
+      let detail: StravaActivityDetail | null = null;
+      try {
+        detail = await ensureActivityDetail({
+          id: r.id,
+          strava_id: r.strava_id,
+          detail_json: r.detail_json,
+        });
+      } catch {
+        detail = parseActivityDetail(r.detail_json);
+      }
+      return {
+        date: r.started_at,
+        name: r.name,
+        distanceKm: r.distance_km,
+        paceSPerKm: r.avg_pace_s_per_km,
+        avgHr: r.avg_hr,
+        maxHr: detail?.max_heartrate ?? null,
+        tss: r.tss,
+        laps: mapLaps(detail),
+      };
+    })
+  );
 
   return buildActivityContext({
     activity,
@@ -765,7 +783,7 @@ async function assembleActivityContext(activity: ActivityWithSplits): Promise<st
     },
     goals,
     zones,
-    laps: toLapSummaries(activity.detail_json),
+    laps: mapLaps(parseActivityDetail(activity.detail_json)),
     recent,
   });
 }
